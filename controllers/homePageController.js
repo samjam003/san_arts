@@ -83,4 +83,183 @@ const home = async (req, res) => {
     ...contactInfo,
   });
 };
-module.exports = { home };
+
+const updateImage = async (req, res) => {
+  const { id } = req.params;
+  const { img_title, description, main_category_id, subcategory_id, filterValues } = req.body;
+  const img_url = req.file ? req.file.path : undefined;
+
+  try {
+    // Start a transaction
+    const { data: imageData, error: imageError } = await supabase
+      .from("art_images")
+      .update({
+        img_title,
+        description,
+        main_category_id,
+        subcategory_id,
+        ...(img_url && { img_url })
+      })
+      .eq("id", id)
+      .select()
+      .single();
+
+    if (imageError) {
+      return res.status(500).json({ message: "Error updating image", error: imageError.message });
+    }
+
+    // Delete existing filter values
+    const { error: deleteError } = await supabase
+      .from("filter_value")
+      .delete()
+      .eq("img_id", id);
+
+    if (deleteError) {
+      return res.status(500).json({ message: "Error deleting existing filter values", error: deleteError.message });
+    }
+
+    // Insert new filter values if provided
+    if (filterValues && filterValues.length > 0) {
+      const filterInsertData = filterValues.map(item => ({
+        img_id: id,
+        filter_id: item.filter_id,
+        value: item.value,
+        subcategory_id
+      }));
+
+      const { error: filterError } = await supabase
+        .from("filter_value")
+        .insert(filterInsertData);
+
+      if (filterError) {
+        return res.status(500).json({ message: "Error inserting filter values", error: filterError.message });
+      }
+    }
+
+    res.status(200).json(imageData);
+  } catch (err) {
+    res.status(500).json({ message: "Unexpected error occurred", error: err.message });
+  }
+};
+
+const deleteImage = async (req, res) => {
+  const { id } = req.params;
+
+  try {
+    // Delete filter values first
+    const { error: filterError } = await supabase
+      .from("filter_value")
+      .delete()
+      .eq("img_id", id);
+
+    if (filterError) {
+      return res.status(500).json({ message: "Error deleting filter values", error: filterError.message });
+    }
+
+    // Delete the image
+    const { error: imageError } = await supabase
+      .from("art_images")
+      .delete()
+      .eq("id", id);
+
+    if (imageError) {
+      return res.status(500).json({ message: "Error deleting image", error: imageError.message });
+    }
+
+    res.status(200).json({ message: "Image deleted successfully" });
+  } catch (err) {
+    res.status(500).json({ message: "Unexpected error occurred", error: err.message });
+  }
+};
+
+const addImage = async (req, res) => {
+  try {
+    if (!req.file) {
+      return res.status(400).json({
+        success: false,
+        message: "No image file provided",
+      });
+    }
+
+    const {
+      img_title,
+      description,
+      main_category_id,
+      subcategory_id,
+      filterValues,
+    } = req.body;
+
+    // Insert the image into art_images table
+    const { data: insertedImage, error: insertImageError } = await supabase
+      .from("art_images")
+      .insert([
+        {
+          img_title,
+          img_url: req.file.path,
+          description,
+          main_category_id,
+          subcategory_id,
+        },
+      ])
+      .select()
+      .single();
+
+    if (insertImageError) {
+      console.error("Error inserting image:", insertImageError);
+      return res.status(500).json({
+        success: false,
+        message: "Failed to insert image data",
+      });
+    }
+
+    // Parse filter values if provided
+    let parsedFilterValues = filterValues;
+    if (typeof filterValues === "string") {
+      try {
+        parsedFilterValues = JSON.parse(filterValues);
+      } catch (err) {
+        return res.status(400).json({
+          success: false,
+          message: "Invalid filterValues JSON format",
+        });
+      }
+    }
+
+    // Insert filter values if provided
+    if (Array.isArray(parsedFilterValues) && parsedFilterValues.length > 0) {
+      const filterInsertData = parsedFilterValues.map(item => ({
+        img_id: insertedImage.id,
+        filter_id: item.filter_id,
+        value: item.value,
+        subcategory_id
+      }));
+
+      const { error: filterError } = await supabase
+        .from("filter_value")
+        .insert(filterInsertData);
+
+      if (filterError) {
+        console.error("Error inserting filter values:", filterError);
+        return res.status(500).json({
+          success: false,
+          message: "Image inserted but failed to insert filter values",
+        });
+      }
+    }
+
+    return res.status(200).json({
+      success: true,
+      message: "Image uploaded successfully",
+      data: insertedImage,
+    });
+  } catch (error) {
+    console.error("Upload error:", error);
+    return res.status(500).json({
+      success: false,
+      message: "Error uploading image",
+      error: error.message,
+    });
+  }
+};
+
+module.exports = { home, updateImage, deleteImage, addImage };
