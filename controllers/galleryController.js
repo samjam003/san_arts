@@ -150,9 +150,10 @@ const getImagesBySubcategory = async (req, res) => {
 //OR filter
 const getFilteredImages = async (req, res) => {
   const { subcategory_id, filters } = req.body;
+  console.log('Received filter request:', { subcategory_id, filters });
 
   try {
-
+    console.log('Fetching initial images for subcategory:', subcategory_id);
     let { data: allImages, error: initialError } = await supabase
       .from('art_images')
       .select('*')
@@ -163,12 +164,16 @@ const getFilteredImages = async (req, res) => {
       return res.status(400).json({ error: initialError });
     }
 
+    console.log('Initial images count:', allImages?.length);
+
     // If filters are provided
     if (filters && Object.keys(filters).length > 0) {
+      console.log('Processing filters:', filters);
       let allMatchingIds = new Set();
 
       for (const [filterId, values] of Object.entries(filters)) {
         if (values && values.length > 0) {
+          console.log(`Fetching matches for filter ${filterId} with values:`, values);
           const { data: matchingImages, error: filterError } = await supabase
             .from('filter_value')
             .select('img_id')
@@ -180,12 +185,15 @@ const getFilteredImages = async (req, res) => {
             return res.status(400).json({ error: filterError });
           }
 
+          console.log(`Found ${matchingImages?.length} matches for filter ${filterId}`);
           matchingImages.forEach(img => allMatchingIds.add(img.img_id));
         }
       }
 
+      console.log('Total unique matching image IDs:', allMatchingIds.size);
       // Keep only images whose ID is in the union of all matching image IDs
       const filteredImages = allImages.filter(img => allMatchingIds.has(img.id));
+      console.log('Final filtered images count:', filteredImages.length);
 
       // Sort by creation date
       filteredImages.sort((a, b) => new Date(b.created_at) - new Date(a.created_at));
@@ -194,6 +202,7 @@ const getFilteredImages = async (req, res) => {
     }
 
     // If no filters, return all subcategory images sorted
+    console.log('No filters provided, returning all images');
     allImages.sort((a, b) => new Date(b.created_at) - new Date(a.created_at));
     return res.json(allImages || []);
   } catch (err) {
@@ -260,8 +269,64 @@ const getFilteredImages = async (req, res) => {
 // };
 
 
-module.exports = {
+const getArtworkById = async (req, res) => {
+  const id = req.params.artworkId; // art_images.id
+  console.log("this artworf:", id)
+  if (req.method !== 'GET') return res.status(405).json({ error: 'Method not allowed' });
 
+  // Step 1: Fetch image and its category/subcategory
+  const { data: imageData, error: imageError } = await supabase
+    .from('art_images')
+    .select(`
+      *,
+      main_categories(id, category_name),
+      subcategories(id, subcategory_name)
+    `)
+    .eq('id', id)
+    .single();
+
+  if (imageError || !imageData) {
+    return res.status(404).json({ error: 'Image not found' });
+  }
+
+  // Step 2: Fetch filter values + filter names for this image
+  const { data: filterData, error: filterError } = await supabase
+    .from('filter_value')
+    .select(`
+      value,
+      filter_id,
+      Filters(filter_name)
+    `)
+    .eq('img_id', id);
+
+  if (filterError) {
+    return res.status(500).json({ error: 'Error fetching filters' });
+  }
+
+  // Format filters
+  const filters = filterData.map(f => ({
+    filter_id: f.filter_id,
+    filter_name: f.Filters?.filter_name || null,
+    value: f.value
+  }));
+
+  // Final response
+  return res.status(200).json({
+    image: {
+      id: imageData.id,
+      img_url: imageData.img_url,
+      img_title: imageData.img_title,
+      description: imageData.description,
+      created_at: imageData.created_at
+    },
+    main_category: imageData.main_categories,
+    subcategory: imageData.subcategories,
+    filters
+  });
+}
+
+module.exports = {
+  getArtworkById,
   getAllMainCategories,
   getAllSubCategories,
   getFiltersBySubCategory,
