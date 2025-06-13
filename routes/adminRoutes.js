@@ -19,11 +19,20 @@ const {
   getAllImages,
   updateImage,
   deleteImage,
-  getDashboardStats
+  getDashboardStats,
 } = require("../controllers/adminController");
 const upload = require("../config/cloudinary");
 
-router.post("/addImage", upload.single("image"), addImage);
+// router.post("/addImage", upload.single("image"), addImage);
+router.post(
+  "/addImage",
+  upload.fields([
+    { name: "main_image", maxCount: 1 },
+    { name: "sub_images", maxCount: 10 },
+  ]),
+  addImage
+);
+
 router.post("/addMainCategory", addMainCategory);
 router.post("/addSubcategory", upload.single("image"), addSubcategory);
 router.post("/addFilter", addFilter);

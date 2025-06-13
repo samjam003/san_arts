@@ -51,16 +51,14 @@ const addMainCategory = async (req, res) => {
 
 const logActivity = async (actionType, description, entityType, entityId) => {
   try {
-    await supabase
-      .from("activity_log")
-      .insert([
-        {
-          action_type: actionType,
-          description,
-          entity_type: entityType,
-          entity_id: entityId
-        }
-      ]);
+    await supabase.from("activity_log").insert([
+      {
+        action_type: actionType,
+        description,
+        entity_type: entityType,
+        entity_id: entityId,
+      },
+    ]);
   } catch (error) {
     console.error("Error logging activity:", error);
   }
@@ -68,47 +66,50 @@ const logActivity = async (actionType, description, entityType, entityId) => {
 
 const addImage = async (req, res) => {
   try {
-    if (!req.file) {
-      return res.status(400).json({
-        success: false,
-        message: "No image file provided",
-      });
-    }
-
     const {
       img_title,
       description,
       main_category_id,
       subcategory_id,
-      filterValues, // could be null, undefined, or an array
+      filterValues,
     } = req.body;
 
-    console.log(" filterValues:", filterValues);
+    const mainImage = req.files?.main_image?.[0];
+    const subImages = req.files?.sub_images || [];
 
-    // Insert the image into art_images table
+    if (!mainImage) {
+      return res.status(400).json({
+        success: false,
+        message: "Main image is required",
+      });
+    }
+
+    const mainImageUrl = mainImage.path; // Cloudinary URL
+    const subImageUrls = subImages.map((img) => img.path); // Cloudinary URLs
+
+    // Insert into Supabase
     const { data: insertedImage, error: insertImageError } = await supabase
       .from("art_images")
       .insert([
         {
           img_title,
-          img_url: req.file.path,
+          img_url: mainImageUrl,
           description,
           main_category_id,
           subcategory_id,
+          sub_images: subImageUrls.length > 0 ? subImageUrls : null,
         },
       ])
       .select()
       .single();
 
     if (insertImageError) {
-      console.error("Error inserting image:", insertImageError);
       return res.status(500).json({
         success: false,
         message: "Failed to insert image data",
       });
     }
 
-    // Log the activity
     await logActivity(
       "create",
       `New image "${img_title}" was added`,
@@ -116,8 +117,8 @@ const addImage = async (req, res) => {
       insertedImage.id
     );
 
+    // Parse and insert filter values
     let parsedFilterValues = filterValues;
-
     if (typeof filterValues === "string") {
       try {
         parsedFilterValues = JSON.parse(filterValues);
@@ -135,14 +136,12 @@ const addImage = async (req, res) => {
         filter_id: item.filter_id,
         value: item.value,
       }));
-      console.log("Preparing to insert filter values:", filterInsertData);
 
       const { error: filterInsertError } = await supabase
         .from("filter_value")
         .insert(filterInsertData);
 
       if (filterInsertError) {
-        console.error("Error inserting filter values:", filterInsertError);
         return res.status(500).json({
           success: false,
           message: "Image inserted but failed to insert filter values",
@@ -150,7 +149,6 @@ const addImage = async (req, res) => {
       }
     }
 
-    // Return success response
     return res.status(200).json({
       success: true,
       message: "Image uploaded successfully",
@@ -168,7 +166,6 @@ const addImage = async (req, res) => {
 
 const addSubcategory = async (req, res) => {
   try {
-
     if (!req.file) {
       return res.status(400).json({
         success: false,
@@ -329,7 +326,7 @@ const deleteMainCategory = async (req, res) => {
     // Log the activity
     await logActivity(
       "delete",
-      `Category "${categoryData?.category_name || 'Unknown'}" was deleted`,
+      `Category "${categoryData?.category_name || "Unknown"}" was deleted`,
       "category",
       id
     );
@@ -358,7 +355,7 @@ const updateSubcategory = async (req, res) => {
       main_category_id,
       subcategory_name,
       description,
-      ...(background_img && { background_img })
+      ...(background_img && { background_img }),
     };
 
     const { data, error } = await supabase
@@ -419,7 +416,9 @@ const deleteSubcategory = async (req, res) => {
     // Log the activity
     await logActivity(
       "delete",
-      `Subcategory "${subcategoryData?.subcategory_name || 'Unknown'}" was deleted`,
+      `Subcategory "${
+        subcategoryData?.subcategory_name || "Unknown"
+      }" was deleted`,
       "subcategory",
       id
     );
@@ -436,19 +435,22 @@ const getAllSubcategories = async (req, res) => {
   try {
     const { data, error } = await supabase
       .from("subcategories")
-      .select(`
+      .select(
+        `
         *,
         main_categories (
           id,
           category_name
         )
-      `)
+      `
+      )
       .order("created_at", { ascending: false });
 
     if (error) {
-      return res
-        .status(500)
-        .json({ message: "Error fetching subcategories", error: error.message });
+      return res.status(500).json({
+        message: "Error fetching subcategories",
+        error: error.message,
+      });
     }
 
     res.status(200).json(data);
@@ -476,7 +478,7 @@ const updateFilter = async (req, res) => {
         filter_name,
         values,
         subcategory_id,
-        description
+        description,
       })
       .eq("id", id)
       .select()
@@ -519,10 +521,7 @@ const deleteFilter = async (req, res) => {
       .eq("id", id)
       .single();
 
-    const { error } = await supabase
-      .from("Filters")
-      .delete()
-      .eq("id", id);
+    const { error } = await supabase.from("Filters").delete().eq("id", id);
 
     if (error) {
       return res
@@ -533,7 +532,7 @@ const deleteFilter = async (req, res) => {
     // Log the activity
     await logActivity(
       "delete",
-      `Filter "${filterData?.filter_name || 'Unknown'}" was deleted`,
+      `Filter "${filterData?.filter_name || "Unknown"}" was deleted`,
       "filter",
       id
     );
@@ -550,13 +549,15 @@ const getAllFilters = async (req, res) => {
   try {
     const { data, error } = await supabase
       .from("Filters")
-      .select(`
+      .select(
+        `
         *,
         subcategories (
           id,
           subcategory_name
         )
-      `)
+      `
+      )
       .order("created_at", { ascending: false });
 
     if (error) {
@@ -583,12 +584,16 @@ const getFiltersBySubcategory = async (req, res) => {
       .eq("subcategory_id", subcategoryId);
 
     if (error) {
-      return res.status(500).json({ message: "Error fetching filters", error: error.message });
+      return res
+        .status(500)
+        .json({ message: "Error fetching filters", error: error.message });
     }
 
     res.status(200).json(data);
   } catch (err) {
-    res.status(500).json({ message: "Unexpected error occurred", error: err.message });
+    res
+      .status(500)
+      .json({ message: "Unexpected error occurred", error: err.message });
   }
 };
 
@@ -597,15 +602,19 @@ const getAllImages = async (req, res) => {
     // First fetch all images
     const { data: images, error: imagesError } = await supabase
       .from("art_images")
-      .select(`
+      .select(
+        `
         *,
         main_categories(category_name),
         subcategories(subcategory_name)
-      `)
+      `
+      )
       .order("created_at", { ascending: false });
 
     if (imagesError) {
-      return res.status(500).json({ message: "Error fetching images", error: imagesError.message });
+      return res
+        .status(500)
+        .json({ message: "Error fetching images", error: imagesError.message });
     }
 
     // For each image, fetch its filter values
@@ -613,31 +622,38 @@ const getAllImages = async (req, res) => {
       images.map(async (image) => {
         const { data: filterValues, error: filterError } = await supabase
           .from("filter_value")
-          .select(`
+          .select(
+            `
             value,
             filter_id,
             Filters(filter_name)
-          `)
+          `
+          )
           .eq("img_id", image.id);
 
         if (filterError) {
-          console.error(`Error fetching filter values for image ${image.id}:`, filterError);
+          console.error(
+            `Error fetching filter values for image ${image.id}:`,
+            filterError
+          );
           return image;
         }
 
         return {
           ...image,
-          filterValues: filterValues.map(fv => ({
+          filterValues: filterValues.map((fv) => ({
             filter_id: fv.filter_id,
-            value: fv.value
-          }))
+            value: fv.value,
+          })),
         };
       })
     );
 
     res.status(200).json(imagesWithFilters);
   } catch (err) {
-    res.status(500).json({ message: "Unexpected error occurred", error: err.message });
+    res
+      .status(500)
+      .json({ message: "Unexpected error occurred", error: err.message });
   }
 };
 
@@ -654,7 +670,7 @@ const updateImage = async (req, res) => {
   console.log("Update Image Request:", {
     id,
     body: req.body,
-    file: req.file
+    file: req.file,
   });
 
   try {
@@ -704,9 +720,10 @@ const updateImage = async (req, res) => {
     let parsedFilterValues = [];
     if (rawFilterValues) {
       try {
-        parsedFilterValues = typeof rawFilterValues === 'string'
-          ? JSON.parse(rawFilterValues)
-          : rawFilterValues;
+        parsedFilterValues =
+          typeof rawFilterValues === "string"
+            ? JSON.parse(rawFilterValues)
+            : rawFilterValues;
       } catch (err) {
         console.error("Filter Values Parse Error:", err);
         return res.status(400).json({
@@ -745,11 +762,13 @@ const updateImage = async (req, res) => {
     // Fetch the updated image with its filter values
     const { data: updatedImage, error: fetchError } = await supabase
       .from("art_images")
-      .select(`
+      .select(
+        `
         *,
         main_categories(category_name),
         subcategories(subcategory_name)
-      `)
+      `
+      )
       .eq("id", id)
       .single();
 
@@ -765,11 +784,13 @@ const updateImage = async (req, res) => {
     // Fetch filter values
     const { data: filterValues, error: filterError } = await supabase
       .from("filter_value")
-      .select(`
+      .select(
+        `
         value,
         filter_id,
         Filters(filter_name)
-      `)
+      `
+      )
       .eq("img_id", id);
 
     if (filterError) {
@@ -783,10 +804,10 @@ const updateImage = async (req, res) => {
 
     const response = {
       ...updatedImage,
-      filterValues: filterValues.map(fv => ({
+      filterValues: filterValues.map((fv) => ({
         filter_id: fv.filter_id,
-        value: fv.value
-      }))
+        value: fv.value,
+      })),
     };
 
     console.log("Update Response:", response);
@@ -852,7 +873,7 @@ const deleteImage = async (req, res) => {
     // Log the activity
     await logActivity(
       "delete",
-      `Image "${imageData?.img_title || 'Unknown'}" was deleted`,
+      `Image "${imageData?.img_title || "Unknown"}" was deleted`,
       "image",
       id
     );
@@ -878,9 +899,10 @@ const getDashboardStats = async (req, res) => {
     if (categoriesError) throw categoriesError;
 
     // Get total subcategories count
-    const { count: subcategoriesCount, error: subcategoriesError } = await supabase
-      .from("subcategories")
-      .select("*", { count: "exact", head: true });
+    const { count: subcategoriesCount, error: subcategoriesError } =
+      await supabase
+        .from("subcategories")
+        .select("*", { count: "exact", head: true });
 
     if (subcategoriesError) throw subcategoriesError;
 
@@ -901,13 +923,15 @@ const getDashboardStats = async (req, res) => {
     // Get recent uploads (last 3 images)
     const { data: recentUploads, error: recentUploadsError } = await supabase
       .from("art_images")
-      .select(`
+      .select(
+        `
         id,
         img_url,
         img_title,
         created_at,
         main_categories(category_name)
-      `)
+      `
+      )
       .order("created_at", { ascending: false })
       .limit(3);
 
@@ -927,17 +951,17 @@ const getDashboardStats = async (req, res) => {
         categories: categoriesCount || 0,
         subcategories: subcategoriesCount || 0,
         images: imagesCount || 0,
-        filters: filtersCount || 0
+        filters: filtersCount || 0,
       },
       recentUploads,
-      recentActivity
+      recentActivity,
     });
   } catch (error) {
     console.error("Dashboard stats error:", error);
     res.status(500).json({
       success: false,
       message: "Error fetching dashboard statistics",
-      error: error.message
+      error: error.message,
     });
   }
 };
@@ -959,5 +983,5 @@ module.exports = {
   getAllImages,
   updateImage,
   deleteImage,
-  getDashboardStats
+  getDashboardStats,
 };
