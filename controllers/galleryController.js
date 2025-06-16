@@ -310,6 +310,8 @@ const getArtworkById = async (req, res) => {
     value: f.value
   }));
 
+  console.log(imageData);
+
   // Final response
   return res.status(200).json({
     image: {
@@ -317,7 +319,8 @@ const getArtworkById = async (req, res) => {
       img_url: imageData.img_url,
       img_title: imageData.img_title,
       description: imageData.description,
-      created_at: imageData.created_at
+      created_at: imageData.created_at,
+      sub_images: imageData.sub_images
     },
     main_category: imageData.main_categories,
     subcategory: imageData.subcategories,
