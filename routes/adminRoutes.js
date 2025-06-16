@@ -21,7 +21,7 @@ const {
   deleteImage,
   getDashboardStats,
 } = require("../controllers/adminController");
-const upload = require("../config/cloudinary");
+const { upload } = require("../config/cloudinary");
 
 // router.post("/addImage", upload.single("image"), addImage);
 router.post(

@@ -34,4 +34,31 @@ const storage = new CloudinaryStorage({
 // Initialize Multer with Cloudinary storage
 const upload = multer({ storage: storage });
 
-module.exports = upload;
+// Helper function to extract public_id from Cloudinary URL
+const getPublicIdFromUrl = (url) => {
+  try {
+    // Example URL: https://res.cloudinary.com/your-cloud-name/image/upload/v1234567890/folder/image_name.jpg
+    const urlParts = url.split("/");
+    const uploadIndex = urlParts.findIndex((part) => part === "upload");
+
+    if (uploadIndex === -1) return null;
+
+    // Get everything after 'upload/v{version}/' or 'upload/'
+    let pathAfterUpload = urlParts.slice(uploadIndex + 1).join("/");
+
+    // Remove version if present (starts with 'v' followed by numbers)
+    if (pathAfterUpload.match(/^v\d+\//)) {
+      pathAfterUpload = pathAfterUpload.replace(/^v\d+\//, "");
+    }
+
+    // Remove file extension
+    const publicId = pathAfterUpload.replace(/\.[^/.]+$/, "");
+
+    return publicId;
+  } catch (error) {
+    console.error("Error extracting public_id from URL:", error);
+    return null;
+  }
+};
+
+module.exports = { upload, getPublicIdFromUrl };
