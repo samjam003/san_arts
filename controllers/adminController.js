@@ -1,5 +1,5 @@
 const { supabase } = require("../config/supabase");
-const { getPublicIdFromUrl } = require("../config/cloudinary");
+const { getPublicIdFromUrl, cloudinary } = require("../config/cloudinary");
 
 const addMainCategory = async (req, res) => {
   // Extract category name and description from the request body
@@ -927,6 +927,10 @@ const deleteImage = async (req, res) => {
 
       if (publicId) {
         try {
+          console.log(`Attempting to delete from Cloudinary:`);
+          console.log(`  Original URL: ${imageUrl}`);
+          console.log(`  Extracted public_id: ${publicId}`);
+
           const cloudinaryResult = await cloudinary.uploader.destroy(publicId);
           console.log(
             `Cloudinary deletion result for ${publicId}:`,
