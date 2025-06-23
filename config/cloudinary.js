@@ -51,4 +51,4 @@ function getPublicIdFromUrl(url) {
   }
 }
 
-module.exports = { upload, getPublicIdFromUrl };
+module.exports = { upload, getPublicIdFromUrl, cloudinary };

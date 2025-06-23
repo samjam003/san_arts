@@ -1,6 +1,6 @@
 const { supabase } = require("../config/supabase");
-const { getPublicIdFromUrl } = require("../config/cloudinary");
-const cloudinary = require("cloudinary").v2;
+const { getPublicIdFromUrl, cloudinary } = require("../config/cloudinary");
+
 const addMainCategory = async (req, res) => {
   // Extract category name and description from the request body
   const { category_name, description } = req.body;
@@ -417,8 +417,7 @@ const deleteSubcategory = async (req, res) => {
     // Log the activity
     await logActivity(
       "delete",
-      `Subcategory "${
-        subcategoryData?.subcategory_name || "Unknown"
+      `Subcategory "${subcategoryData?.subcategory_name || "Unknown"
       }" was deleted`,
       "subcategory",
       id
@@ -894,15 +893,15 @@ const updateImage = async (req, res) => {
 
 const deleteImage = async (req, res) => {
   const { id } = req.params;
-console.log(id)
+  console.log(id)
   try {
     // Fetch image data first
-    const { data: imageData , error: fetchError} = await supabase
+    const { data: imageData, error: fetchError } = await supabase
       .from("art_images")
       .select("img_title, img_url, sub_images")
       .eq("id", id)
       .single();
-console.log(imageData ||fetchError )
+    console.log(imageData || fetchError)
     if (!imageData) {
       return res.status(404).json({
         success: false,
@@ -918,170 +917,174 @@ console.log(imageData ||fetchError )
     // Delete all images from Cloudinary
     for (const imageUrl of imagesToDelete) {
       const publicId = getPublicIdFromUrl(imageUrl);
-      if (!publicId) {
-        console.warn("Could not extract public_id from URL:", imageUrl);
-        continue;
-      }
 
-      try {
-        const cloudinaryResult = await cloudinary.uploader.destroy(publicId, { invalidate: true });
-        console.log(`Cloudinary deletion result for ${publicId}:`, cloudinaryResult);
+      if (publicId) {
+        try {
+          console.log(`Attempting to delete from Cloudinary:`);
+          console.log(`  Original URL: ${imageUrl}`);
+          console.log(`  Extracted public_id: ${publicId}`);
 
-        if (
-          cloudinaryResult.result !== "ok" &&
-          cloudinaryResult.result !== "not found"
-        ) {
-          console.warn(`Cloudinary deletion may have failed for ${publicId}:`, cloudinaryResult);
+          const cloudinaryResult = await cloudinary.uploader.destroy(publicId);
+          console.log(
+            `Cloudinary deletion result for ${publicId}:`,
+            cloudinaryResult
+          );
+
+          if (
+            cloudinaryResult.result !== "ok" &&
+            cloudinaryResult.result !== "not found"
+          ) {
+            console.warn(`Cloudinary deletion may have failed for ${publicId}:`, cloudinaryResult);
+          }
+        } catch (err) {
+          console.error(`Error deleting ${publicId} from Cloudinary:`, err);
         }
-      } catch (err) {
-        console.error(`Error deleting ${publicId} from Cloudinary:`, err);
       }
-    }
 
-    // Delete related filter values
-    const { error: filterError } = await supabase
-      .from("filter_value")
-      .delete()
-      .eq("img_id", id);
+      // Delete related filter values
+      const { error: filterError } = await supabase
+        .from("filter_value")
+        .delete()
+        .eq("img_id", id);
 
-    if (filterError) {
+      if (filterError) {
+        return res.status(500).json({
+          success: false,
+          message: "Failed to delete filter values",
+          error: filterError.message,
+        });
+      }
+
+      // Delete image from art_images table
+      const { error: imageError } = await supabase
+        .from("art_images")
+        .delete()
+        .eq("id", id);
+
+      if (imageError) {
+        return res.status(500).json({
+          success: false,
+          message: "Failed to delete image from database",
+          error: imageError.message,
+        });
+      }
+
+      // Optional: Log deletion
+      await logActivity(
+        "delete",
+        `Image "${imageData?.img_title || "Untitled"}" was deleted`,
+        "image",
+        id
+      );
+
+      return res.status(200).json({
+        success: true,
+        message: "Image deleted successfully from both Cloudinary and database",
+      });
+
+    } catch (error) {
+      console.error("Delete error:", error);
       return res.status(500).json({
         success: false,
-        message: "Failed to delete filter values",
-        error: filterError.message,
+        message: "Error deleting image",
+        error: error.message,
       });
     }
+  };
 
-    // Delete image from art_images table
-    const { error: imageError } = await supabase
-      .from("art_images")
-      .delete()
-      .eq("id", id);
-
-    if (imageError) {
-      return res.status(500).json({
-        success: false,
-        message: "Failed to delete image from database",
-        error: imageError.message,
-      });
-    }
-
-    // Optional: Log deletion
-    await logActivity(
-      "delete",
-      `Image "${imageData?.img_title || "Untitled"}" was deleted`,
-      "image",
-      id
-    );
-
-    return res.status(200).json({
-      success: true,
-      message: "Image deleted successfully from both Cloudinary and database",
-    });
-
-  } catch (error) {
-    console.error("Delete error:", error);
-    return res.status(500).json({
-      success: false,
-      message: "Error deleting image",
-      error: error.message,
-    });
-  }
-};
-
-const getDashboardStats = async (req, res) => {
-  try {
-    // Get total categories count
-    const { count: categoriesCount, error: categoriesError } = await supabase
-      .from("main_categories")
-      .select("*", { count: "exact", head: true });
-
-    if (categoriesError) throw categoriesError;
-
-    // Get total subcategories count
-    const { count: subcategoriesCount, error: subcategoriesError } =
-      await supabase
-        .from("subcategories")
+  const getDashboardStats = async (req, res) => {
+    try {
+      // Get total categories count
+      const { count: categoriesCount, error: categoriesError } = await supabase
+        .from("main_categories")
         .select("*", { count: "exact", head: true });
 
-    if (subcategoriesError) throw subcategoriesError;
+      if (categoriesError) throw categoriesError;
 
-    // Get total images count
-    const { count: imagesCount, error: imagesError } = await supabase
-      .from("art_images")
-      .select("*", { count: "exact", head: true });
+      // Get total subcategories count
+      const { count: subcategoriesCount, error: subcategoriesError } =
+        await supabase
+          .from("subcategories")
+          .select("*", { count: "exact", head: true });
 
-    if (imagesError) throw imagesError;
+      if (subcategoriesError) throw subcategoriesError;
 
-    // Get total filters count
-    const { count: filtersCount, error: filtersError } = await supabase
-      .from("Filters")
-      .select("*", { count: "exact", head: true });
+      // Get total images count
+      const { count: imagesCount, error: imagesError } = await supabase
+        .from("art_images")
+        .select("*", { count: "exact", head: true });
 
-    if (filtersError) throw filtersError;
+      if (imagesError) throw imagesError;
 
-    // Get recent uploads (last 3 images)
-    const { data: recentUploads, error: recentUploadsError } = await supabase
-      .from("art_images")
-      .select(
-        `
+      // Get total filters count
+      const { count: filtersCount, error: filtersError } = await supabase
+        .from("Filters")
+        .select("*", { count: "exact", head: true });
+
+      if (filtersError) throw filtersError;
+
+      // Get recent uploads (last 3 images)
+      const { data: recentUploads, error: recentUploadsError } = await supabase
+        .from("art_images")
+        .select(
+          `
         id,
         img_url,
         img_title,
         created_at,
         main_categories(category_name)
       `
-      )
-      .order("created_at", { ascending: false })
-      .limit(3);
+        )
+        .order("created_at", { ascending: false })
+        .limit(3);
 
-    if (recentUploadsError) throw recentUploadsError;
+      if (recentUploadsError) throw recentUploadsError;
 
-    // Get recent activity (last 5 activities)
-    const { data: recentActivity, error: activityError } = await supabase
-      .from("activity_log")
-      .select("*")
-      .order("created_at", { ascending: false })
-      .limit(5);
+      // Get recent activity (last 5 activities)
+      const { data: recentActivity, error: activityError } = await supabase
+        .from("activity_log")
+        .select("*")
+        .order("created_at", { ascending: false })
+        .limit(5);
 
-    if (activityError) throw activityError;
+      if (activityError) throw activityError;
 
-    res.status(200).json({
-      stats: {
-        categories: categoriesCount || 0,
-        subcategories: subcategoriesCount || 0,
-        images: imagesCount || 0,
-        filters: filtersCount || 0,
-      },
-      recentUploads,
-      recentActivity,
-    });
-  } catch (error) {
-    console.error("Dashboard stats error:", error);
-    res.status(500).json({
-      success: false,
-      message: "Error fetching dashboard statistics",
-      error: error.message,
-    });
-  }
-};
+      res.status(200).json({
+        stats: {
+          categories: categoriesCount || 0,
+          subcategories: subcategoriesCount || 0,
+          images: imagesCount || 0,
+          filters: filtersCount || 0,
+        },
+        recentUploads,
+        recentActivity,
+      });
+    } catch (error) {
+      console.error("Dashboard stats error:", error);
+      res.status(500).json({
+        success: false,
+        message: "Error fetching dashboard statistics",
+        error: error.message,
+      });
+    }
+  };
 
-module.exports = {
-  addMainCategory,
-  addImage,
-  addSubcategory,
-  addFilter,
-  updateMainCategory,
-  deleteMainCategory,
-  updateSubcategory,
-  deleteSubcategory,
-  getAllSubcategories,
-  updateFilter,
-  deleteFilter,
-  getAllFilters,
-  getFiltersBySubcategory,
-  getAllImages,
-  updateImage,
-  deleteImage,
-  getDashboardStats,
-};
+  module.exports = {
+    addMainCategory,
+    addImage,
+    addSubcategory,
+    addFilter,
+    updateMainCategory,
+    deleteMainCategory,
+    updateSubcategory,
+    deleteSubcategory,
+    getAllSubcategories,
+    updateFilter,
+    deleteFilter,
+    getAllFilters,
+    getFiltersBySubcategory,
+    getAllImages,
+    updateImage,
+    deleteImage,
+    getDashboardStats,
+  };
