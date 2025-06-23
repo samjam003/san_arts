@@ -10,6 +10,10 @@ const {
 } = require("../controllers/galleryController");
 
 //routes
+
+router.get("/", (req, res) => {
+  res.status(200).json({ message: "Gallery API is working!" })
+});
 router.get("/getAllMainCategories", getAllMainCategories);
 router.get("/:categoryId/getAllSubCategories", getAllSubCategories);
 router.get("/:subCategoryId/getFilters", getFiltersBySubCategory);
