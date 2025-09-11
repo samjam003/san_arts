@@ -417,8 +417,7 @@ const deleteSubcategory = async (req, res) => {
     // Log the activity
     await logActivity(
       "delete",
-      `Subcategory "${
-        subcategoryData?.subcategory_name || "Unknown"
+      `Subcategory "${subcategoryData?.subcategory_name || "Unknown"
       }" was deleted`,
       "subcategory",
       id
@@ -891,16 +890,18 @@ const updateImage = async (req, res) => {
 // };
 
 // delete in cloudinary
+
 const deleteImage = async (req, res) => {
   const { id } = req.params;
+  console.log(id)
   try {
-    // Get image data before deleting (including the image URL)
-    const { data: imageData } = await supabase
+    // Fetch image data first
+    const { data: imageData, error: fetchError } = await supabase
       .from("art_images")
-      .select("img_title, img_url, sub_images") // Make sure to select the image URL field
+      .select("img_title, img_url, sub_images")
       .eq("id", id)
       .single();
-
+    console.log(imageData || fetchError)
     if (!imageData) {
       return res.status(404).json({
         success: false,
@@ -908,18 +909,10 @@ const deleteImage = async (req, res) => {
       });
     }
 
-    // Delete from Cloudinary first
+    // Prepare all image URLs (main + sub images)
     const imagesToDelete = [];
-
-    // Add main image URL
-    if (imageData.img_url) {
-      imagesToDelete.push(imageData.img_url);
-    }
-
-    // Add sub_images URLs
-    if (imageData.sub_images && Array.isArray(imageData.sub_images)) {
-      imagesToDelete.push(...imageData.sub_images);
-    }
+    if (imageData.img_url) imagesToDelete.push(imageData.img_url);
+    if (Array.isArray(imageData.sub_images)) imagesToDelete.push(...imageData.sub_images);
 
     // Delete all images from Cloudinary
     for (const imageUrl of imagesToDelete) {
@@ -937,70 +930,62 @@ const deleteImage = async (req, res) => {
             cloudinaryResult
           );
 
-          // Check if deletion was successful
           if (
             cloudinaryResult.result !== "ok" &&
             cloudinaryResult.result !== "not found"
           ) {
-            console.warn(
-              `Cloudinary deletion may have failed for ${publicId}:`,
-              cloudinaryResult
-            );
+            console.warn(`Cloudinary deletion may have failed for ${publicId}:`, cloudinaryResult);
           }
-        } catch (cloudinaryError) {
-          console.error(
-            `Error deleting ${publicId} from Cloudinary:`,
-            cloudinaryError
-          );
-          // Continue with other images even if one fails
+        } catch (err) {
+          console.error(`Error deleting ${publicId} from Cloudinary:`, err);
         }
-      } else {
-        console.warn("Could not extract public_id from URL:", imageUrl);
       }
-    }
 
-    // Delete filter values first
-    const { error: filterError } = await supabase
-      .from("filter_value")
-      .delete()
-      .eq("img_id", id);
+      // Delete related filter values
+      const { error: filterError } = await supabase
+        .from("filter_value")
+        .delete()
+        .eq("img_id", id);
 
-    if (filterError) {
-      return res.status(500).json({
-        success: false,
-        message: "Failed to delete filter values",
-        error: filterError.message,
+      if (filterError) {
+        return res.status(500).json({
+          success: false,
+          message: "Failed to delete filter values",
+          error: filterError.message,
+        });
+      }
+
+      // Delete image from art_images table
+      const { error: imageError } = await supabase
+        .from("art_images")
+        .delete()
+        .eq("id", id);
+
+      if (imageError) {
+        return res.status(500).json({
+          success: false,
+          message: "Failed to delete image from database",
+          error: imageError.message,
+        });
+      }
+
+      // Optional: Log deletion
+      await logActivity(
+        "delete",
+        `Image "${imageData?.img_title || "Untitled"}" was deleted`,
+        "image",
+        id
+      );
+
+      return res.status(200).json({
+        success: true,
+        message: "Image deleted successfully from both Cloudinary and database",
       });
+
     }
-
-    // Delete the image from database
-    const { error: imageError } = await supabase
-      .from("art_images")
-      .delete()
-      .eq("id", id);
-
-    if (imageError) {
-      return res.status(500).json({
-        success: false,
-        message: "Failed to delete image from database",
-        error: imageError.message,
-      });
-    }
-
-    // Log the activity
-    await logActivity(
-      "delete",
-      `Image "${imageData?.img_title || "Unknown"}" was deleted`,
-      "image",
-      id
-    );
-
-    res.status(200).json({
-      message: "Image deleted successfully from both Cloudinary and database",
-    });
   } catch (error) {
     console.error("Delete error:", error);
-    res.status(500).json({
+    return res.status(500).json({
       success: false,
       message: "Error deleting image",
       error: error.message,
