@@ -8,6 +8,7 @@ const {
   getFilteredImages,
   getArtworkById,
   toggleLike,
+  fetchLikes,
 } = require("../controllers/galleryController");
 
 //routes
@@ -22,5 +23,8 @@ router.get("/:subCategoryId/getImages", getImagesBySubcategory);
 router.post("/filter", getFilteredImages);
 router.get("/artwork/:artworkId", getArtworkById);
 router.post("/artwork/:artworkID/like", toggleLike);
+
+router.get("/artwork/:artworkID/likes", fetchLikes);
+
 
 module.exports = router;

@@ -390,6 +390,25 @@ const toggleLike = async (req, res) => {
   }
 };
 
+const fetchLikes = async (req, res) => {
+  const { artworkID } = req.params;
+
+  try {
+    const { data, error } = await supabase
+      .from("art_images")
+      .select("likes")
+      .eq("id", artworkID)
+      .maybeSingle();
+
+    if (error) throw error;
+    if (!data) return res.status(404).json({ error: "Artwork not found" });
+
+    res.json({ likes: data.likes || 0 });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: err.message });
+  }
+};
 module.exports = {
   getArtworkById,
   getAllMainCategories,
@@ -398,4 +417,5 @@ module.exports = {
   getImagesBySubcategory,
   getFilteredImages,
   toggleLike,
+  fetchLikes
 };
