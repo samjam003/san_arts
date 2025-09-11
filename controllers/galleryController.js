@@ -120,6 +120,7 @@ const getImagesBySubcategory = async (req, res) => {
         img_url, 
         img_title, 
         description, 
+        likes,
         created_at,
         main_categories(category_name),
         subcategories(subcategory_name)
@@ -150,64 +151,75 @@ const getImagesBySubcategory = async (req, res) => {
 //OR filter
 const getFilteredImages = async (req, res) => {
   const { subcategory_id, filters } = req.body;
-  console.log('Received filter request:', { subcategory_id, filters });
+  console.log("Received filter request:", { subcategory_id, filters });
 
   try {
-    console.log('Fetching initial images for subcategory:', subcategory_id);
+    console.log("Fetching initial images for subcategory:", subcategory_id);
     let { data: allImages, error: initialError } = await supabase
-      .from('art_images')
-      .select('*')
-      .eq('subcategory_id', subcategory_id);
+      .from("art_images")
+      .select("*")
+      .eq("subcategory_id", subcategory_id);
 
     if (initialError) {
-      console.error('Initial query error:', initialError);
+      console.error("Initial query error:", initialError);
       return res.status(400).json({ error: initialError });
     }
 
-    console.log('Initial images count:', allImages?.length);
+    console.log("Initial images count:", allImages?.length);
 
     // If filters are provided
     if (filters && Object.keys(filters).length > 0) {
-      console.log('Processing filters:', filters);
+      console.log("Processing filters:", filters);
       let allMatchingIds = new Set();
 
       for (const [filterId, values] of Object.entries(filters)) {
         if (values && values.length > 0) {
-          console.log(`Fetching matches for filter ${filterId} with values:`, values);
+          console.log(
+            `Fetching matches for filter ${filterId} with values:`,
+            values
+          );
           const { data: matchingImages, error: filterError } = await supabase
-            .from('filter_value')
-            .select('img_id')
-            .eq('filter_id', filterId)
-            .in('value', values);
+            .from("filter_value")
+            .select("img_id")
+            .eq("filter_id", filterId)
+            .in("value", values);
 
           if (filterError) {
-            console.error('Filter query error:', filterError);
+            console.error("Filter query error:", filterError);
             return res.status(400).json({ error: filterError });
           }
 
-          console.log(`Found ${matchingImages?.length} matches for filter ${filterId}`);
-          matchingImages.forEach(img => allMatchingIds.add(img.img_id));
+          console.log(
+            `Found ${matchingImages?.length} matches for filter ${filterId}`
+          );
+          matchingImages.forEach((img) => allMatchingIds.add(img.img_id));
         }
       }
 
-      console.log('Total unique matching image IDs:', allMatchingIds.size);
+      console.log("Total unique matching image IDs:", allMatchingIds.size);
       // Keep only images whose ID is in the union of all matching image IDs
-      const filteredImages = allImages.filter(img => allMatchingIds.has(img.id));
-      console.log('Final filtered images count:', filteredImages.length);
+      const filteredImages = allImages.filter((img) =>
+        allMatchingIds.has(img.id)
+      );
+      console.log("Final filtered images count:", filteredImages.length);
 
       // Sort by creation date
-      filteredImages.sort((a, b) => new Date(b.created_at) - new Date(a.created_at));
+      filteredImages.sort(
+        (a, b) => new Date(b.created_at) - new Date(a.created_at)
+      );
 
       return res.json(filteredImages || []);
     }
 
     // If no filters, return all subcategory images sorted
-    console.log('No filters provided, returning all images');
+    console.log("No filters provided, returning all images");
     allImages.sort((a, b) => new Date(b.created_at) - new Date(a.created_at));
     return res.json(allImages || []);
   } catch (err) {
-    console.error('Gallery filter error:', err);
-    return res.status(500).json({ message: 'Server error', details: err.message });
+    console.error("Gallery filter error:", err);
+    return res
+      .status(500)
+      .json({ message: "Server error", details: err.message });
   }
 };
 
@@ -268,46 +280,50 @@ const getFilteredImages = async (req, res) => {
 //   }
 // };
 
-
 const getArtworkById = async (req, res) => {
   const id = req.params.artworkId; // art_images.id
-  console.log("this artworf:", id)
-  if (req.method !== 'GET') return res.status(405).json({ error: 'Method not allowed' });
+  console.log("this artworf:", id);
+  if (req.method !== "GET")
+    return res.status(405).json({ error: "Method not allowed" });
 
   // Step 1: Fetch image and its category/subcategory
   const { data: imageData, error: imageError } = await supabase
-    .from('art_images')
-    .select(`
+    .from("art_images")
+    .select(
+      `
       *,
       main_categories(id, category_name),
       subcategories(id, subcategory_name)
-    `)
-    .eq('id', id)
+    `
+    )
+    .eq("id", id)
     .single();
 
   if (imageError || !imageData) {
-    return res.status(404).json({ error: 'Image not found' });
+    return res.status(404).json({ error: "Image not found" });
   }
 
   // Step 2: Fetch filter values + filter names for this image
   const { data: filterData, error: filterError } = await supabase
-    .from('filter_value')
-    .select(`
+    .from("filter_value")
+    .select(
+      `
       value,
       filter_id,
       Filters(filter_name)
-    `)
-    .eq('img_id', id);
+    `
+    )
+    .eq("img_id", id);
 
   if (filterError) {
-    return res.status(500).json({ error: 'Error fetching filters' });
+    return res.status(500).json({ error: "Error fetching filters" });
   }
 
   // Format filters
-  const filters = filterData.map(f => ({
+  const filters = filterData.map((f) => ({
     filter_id: f.filter_id,
     filter_name: f.Filters?.filter_name || null,
-    value: f.value
+    value: f.value,
   }));
 
   console.log(imageData);
@@ -320,13 +336,59 @@ const getArtworkById = async (req, res) => {
       img_title: imageData.img_title,
       description: imageData.description,
       created_at: imageData.created_at,
-      sub_images: imageData.sub_images
+      sub_images: imageData.sub_images,
     },
     main_category: imageData.main_categories,
     subcategory: imageData.subcategories,
-    filters
+    filters,
   });
-}
+};
+
+const toggleLike = async (req, res) => {
+  try {
+    const { artworkID } = req.params;
+    const { flag } = req.body; // true = like, false = dislike
+
+    if (!artworkID || typeof flag !== "boolean") {
+      return res
+        .status(400)
+        .json({ error: "artworkID and flag (boolean) are required" });
+    }
+
+    // Get current like count
+    const { data: artwork, error: fetchError } = await supabase
+      .from("art_images")
+      .select("likes")
+      .eq("id", artworkID)
+      .maybeSingle();
+
+    if (fetchError) throw fetchError;
+    if (!artwork) return res.status(404).json({ error: "Artwork not found" });
+
+    let newLikes = artwork.likes || 0;
+
+    if (flag) {
+      newLikes += 1; // increment
+    } else {
+      newLikes = Math.max(0, newLikes - 1); // decrement but never below 0
+    }
+
+    // Update in DB
+    const { data, error: updateError } = await supabase
+      .from("art_images")
+      .update({ likes: newLikes })
+      .eq("id", artworkID)
+      .select("likes")
+      .maybeSingle();
+
+    if (updateError) throw updateError;
+
+    res.json({ success: true, likes: data.likes });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: err.message });
+  }
+};
 
 module.exports = {
   getArtworkById,
@@ -334,5 +396,6 @@ module.exports = {
   getAllSubCategories,
   getFiltersBySubCategory,
   getImagesBySubcategory,
-  getFilteredImages
+  getFilteredImages,
+  toggleLike,
 };

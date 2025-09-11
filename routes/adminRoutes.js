@@ -24,6 +24,7 @@ const {
 const { upload } = require("../config/cloudinary");
 
 // router.post("/addImage", upload.single("image"), addImage);
+//IMAGES
 router.post(
   "/addImage",
   upload.fields([
@@ -32,22 +33,25 @@ router.post(
   ]),
   addImage
 );
-
+router.get("/images", getAllImages);
+router.delete("/deleteImage/:id", deleteImage);
+router.put("/updateImage/:id", upload.single("image"), updateImage);
+// MAIN-CATEGORY
 router.post("/addMainCategory", addMainCategory);
-router.post("/addSubcategory", upload.single("image"), addSubcategory);
-router.post("/addFilter", addFilter);
 router.put("/updateMainCategory/:id", updateMainCategory);
 router.delete("/deleteMainCategory/:id", deleteMainCategory);
+//SUB-CATEGORY
+router.post("/addSubcategory", upload.single("image"), addSubcategory);
+router.get("/subcategories", getAllSubcategories);
 router.put("/updateSubcategory/:id", upload.single("image"), updateSubcategory);
 router.delete("/deleteSubcategory/:id", deleteSubcategory);
-router.get("/subcategories", getAllSubcategories);
+//FILTERS
+router.post("/addFilter", addFilter);
 router.put("/updateFilter/:id", updateFilter);
 router.delete("/deleteFilter/:id", deleteFilter);
 router.get("/filters", getAllFilters);
 router.get("/filters/:subcategoryId", getFiltersBySubcategory);
-router.get("/images", getAllImages);
-router.put("/updateImage/:id", upload.single("image"), updateImage);
-router.delete("/deleteImage/:id", deleteImage);
+//DASHBOARD
 router.get("/dashboard/stats", getDashboardStats);
 
 module.exports = router;
