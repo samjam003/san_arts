@@ -166,7 +166,7 @@ const getFilteredImages = async (req, res) => {
     }
 
     console.log("Initial images count:", allImages?.length);
-
+    // 
     // If filters are provided
     if (filters && Object.keys(filters).length > 0) {
       console.log("Processing filters:", filters);
