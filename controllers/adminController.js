@@ -1,5 +1,9 @@
 const { supabase } = require("../config/supabase");
-const { getPublicIdFromUrl, cloudinary } = require("../config/cloudinary");
+const {
+  getPublicIdFromUrl,
+  cloudinary,
+  uploadToCloudinary,
+} = require("../config/cloudinary");
 
 const addMainCategory = async (req, res) => {
   // Extract category name and description from the request body
@@ -65,7 +69,107 @@ const logActivity = async (actionType, description, entityType, entityId) => {
   }
 };
 
-const addImage = async (req, res) => {
+// const addImage = async (req, res) => {
+//   try {
+//     const {
+//       img_title,
+//       description,
+//       main_category_id,
+//       subcategory_id,
+//       filterValues,
+//     } = req.body;
+
+//     const mainImage = req.files?.main_image?.[0];
+//     const subImages = req.files?.sub_images || [];
+
+//     if (!mainImage) {
+//       return res.status(400).json({
+//         success: false,
+//         message: "Main image is required",
+//       });
+//     }
+
+//     const mainImageUrl = mainImage.path; // Cloudinary URL
+//     const subImageUrls = subImages.map((img) => img.path); // Cloudinary URLs
+
+//     // Insert into Supabase
+//     const { data: insertedImage, error: insertImageError } = await supabase
+//       .from("art_images")
+//       .insert([
+//         {
+//           img_title,
+//           description,
+//           main_category_id,
+//           subcategory_id,
+//           img_url: mainImageUrl,
+//           sub_images: subImageUrls.length > 0 ? subImageUrls : null,
+//         },
+//       ])
+//       .select()
+//       .single();
+
+//     if (insertImageError) {
+//       return res.status(500).json({
+//         success: false,
+//         message: "Failed to insert image data",
+//       });
+//     }
+
+//     await logActivity(
+//       "create",
+//       `New image "${img_title}" was added`,
+//       "image",
+//       insertedImage.id
+//     );
+
+//     // Parse and insert filter values
+//     let parsedFilterValues = filterValues;
+//     if (typeof filterValues === "string") {
+//       try {
+//         parsedFilterValues = JSON.parse(filterValues);
+//       } catch (err) {
+//         return res.status(400).json({
+//           success: false,
+//           message: "Invalid filterValues JSON format",
+//         });
+//       }
+//     }
+
+//     if (Array.isArray(parsedFilterValues) && parsedFilterValues.length > 0) {
+//       const filterInsertData = parsedFilterValues.map((item) => ({
+//         img_id: insertedImage.id,
+//         filter_id: item.filter_id,
+//         value: item.value,
+//       }));
+
+//       const { error: filterInsertError } = await supabase
+//         .from("filter_value")
+//         .insert(filterInsertData);
+
+//       if (filterInsertError) {
+//         return res.status(500).json({
+//           success: false,
+//           message: "Image inserted but failed to insert filter values",
+//         });
+//       }
+//     }
+
+//     return res.status(200).json({
+//       success: true,
+//       message: "Image uploaded successfully",
+//       data: insertedImage,
+//     });
+//   } catch (error) {
+//     console.error("Upload error:", error);
+//     return res.status(500).json({
+//       success: false,
+//       message: "Error uploading image",
+//       error: error.message,
+//     });
+//   }
+// };
+
+const addPost = async (req, res) => {
   try {
     const {
       img_title,
@@ -75,9 +179,12 @@ const addImage = async (req, res) => {
       filterValues,
     } = req.body;
 
+    // Extract files from request
     const mainImage = req.files?.main_image?.[0];
     const subImages = req.files?.sub_images || [];
+    const video = req.files?.video?.[0]; // Optional video
 
+    // Validate required fields
     if (!mainImage) {
       return res.status(400).json({
         success: false,
@@ -85,37 +192,83 @@ const addImage = async (req, res) => {
       });
     }
 
-    const mainImageUrl = mainImage.path; // Cloudinary URL
-    const subImageUrls = subImages.map((img) => img.path); // Cloudinary URLs
+    let mainImageUrl;
+    let subImageUrls = [];
+    let videoUrl = null;
 
-    // Insert into Supabase
-    const { data: insertedImage, error: insertImageError } = await supabase
-      .from("art_images")
-      .insert([
-        {
-          img_title,
-          img_url: mainImageUrl,
-          description,
-          main_category_id,
-          subcategory_id,
-          sub_images: subImageUrls.length > 0 ? subImageUrls : null,
-        },
-      ])
-      .select()
-      .single();
+    try {
+      // Upload main image to Cloudinary
+      const mainImageResult = await uploadToCloudinary(mainImage.buffer, {
+        folder: "sanarts/images",
+        resource_type: "image",
+        allowed_formats: ["jpg", "jpeg", "png", "gif", "webp"],
+      });
+      mainImageUrl = mainImageResult.secure_url;
 
-    if (insertImageError) {
+      // Upload sub images if present
+      if (subImages.length > 0) {
+        const subImagePromises = subImages.map((img) =>
+          uploadToCloudinary(img.buffer, {
+            folder: "sanarts/images",
+            resource_type: "image",
+            allowed_formats: ["jpg", "jpeg", "png", "gif", "webp"],
+          })
+        );
+        const subImageResults = await Promise.all(subImagePromises);
+        subImageUrls = subImageResults.map((result) => result.secure_url);
+      }
+
+      // Upload video if present (optional)
+      if (video) {
+        const videoResult = await uploadToCloudinary(video.buffer, {
+          folder: "sanarts/videos",
+          resource_type: "video",
+          allowed_formats: ["mp4", "mov", "avi", "mkv", "webm", "flv"],
+        });
+        videoUrl = videoResult.secure_url;
+      }
+    } catch (uploadError) {
+      console.error("Cloudinary upload error:", uploadError);
       return res.status(500).json({
         success: false,
-        message: "Failed to insert image data",
+        message: "Failed to upload media to Cloudinary",
+        error: uploadError.message,
       });
     }
 
+    // Prepare data for database insertion
+    const postData = {
+      img_title,
+      img_url: mainImageUrl,
+      description,
+      main_category_id,
+      subcategory_id,
+      sub_images: subImageUrls.length > 0 ? subImageUrls : null,
+      video_url: videoUrl, // Add video URL field
+    };
+
+    // Insert into Supabase
+    const { data: insertedPost, error: insertPostError } = await supabase
+      .from("art_images") // You might want to rename this table to "posts" or "art_posts"
+      .insert([postData])
+      .select()
+      .single();
+
+    if (insertPostError) {
+      console.error("Database insertion error:", insertPostError);
+      return res.status(500).json({
+        success: false,
+        message: "Failed to insert post data",
+        error: insertPostError.message,
+      });
+    }
+
+    // Log activity
     await logActivity(
       "create",
-      `New image "${img_title}" was added`,
-      "image",
-      insertedImage.id
+      `New post "${img_title}" was added${videoUrl ? " with video" : ""}`,
+      "post",
+      insertedPost.id
     );
 
     // Parse and insert filter values
@@ -127,13 +280,14 @@ const addImage = async (req, res) => {
         return res.status(400).json({
           success: false,
           message: "Invalid filterValues JSON format",
+          error: err.message,
         });
       }
     }
 
     if (Array.isArray(parsedFilterValues) && parsedFilterValues.length > 0) {
       const filterInsertData = parsedFilterValues.map((item) => ({
-        img_id: insertedImage.id,
+        img_id: insertedPost.id, // You might want to rename this field to "post_id"
         filter_id: item.filter_id,
         value: item.value,
       }));
@@ -143,28 +297,32 @@ const addImage = async (req, res) => {
         .insert(filterInsertData);
 
       if (filterInsertError) {
+        console.error("Filter insertion error:", filterInsertError);
         return res.status(500).json({
           success: false,
-          message: "Image inserted but failed to insert filter values",
+          message: "Post inserted but failed to insert filter values",
+          error: filterInsertError.message,
         });
       }
     }
 
     return res.status(200).json({
       success: true,
-      message: "Image uploaded successfully",
-      data: insertedImage,
+      message: `Post uploaded successfully${videoUrl ? " with video" : ""}`,
+      data: {
+        ...insertedPost,
+        has_video: !!videoUrl,
+      },
     });
   } catch (error) {
     console.error("Upload error:", error);
     return res.status(500).json({
       success: false,
-      message: "Error uploading image",
+      message: "Error uploading post",
       error: error.message,
     });
   }
 };
-
 const addSubcategory = async (req, res) => {
   try {
     if (!req.file) {
@@ -417,7 +575,8 @@ const deleteSubcategory = async (req, res) => {
     // Log the activity
     await logActivity(
       "delete",
-      `Subcategory "${subcategoryData?.subcategory_name || "Unknown"
+      `Subcategory "${
+        subcategoryData?.subcategory_name || "Unknown"
       }" was deleted`,
       "subcategory",
       id
@@ -893,7 +1052,7 @@ const updateImage = async (req, res) => {
 
 const deleteImage = async (req, res) => {
   const { id } = req.params;
-  console.log(id)
+  console.log(id);
   try {
     // Fetch image data first
     const { data: imageData, error: fetchError } = await supabase
@@ -901,7 +1060,7 @@ const deleteImage = async (req, res) => {
       .select("img_title, img_url, sub_images")
       .eq("id", id)
       .single();
-    console.log(imageData || fetchError)
+    console.log(imageData || fetchError);
     if (!imageData) {
       return res.status(404).json({
         success: false,
@@ -912,7 +1071,8 @@ const deleteImage = async (req, res) => {
     // Prepare all image URLs (main + sub images)
     const imagesToDelete = [];
     if (imageData.img_url) imagesToDelete.push(imageData.img_url);
-    if (Array.isArray(imageData.sub_images)) imagesToDelete.push(...imageData.sub_images);
+    if (Array.isArray(imageData.sub_images))
+      imagesToDelete.push(...imageData.sub_images);
 
     // Delete all images from Cloudinary
     for (const imageUrl of imagesToDelete) {
@@ -934,7 +1094,10 @@ const deleteImage = async (req, res) => {
             cloudinaryResult.result !== "ok" &&
             cloudinaryResult.result !== "not found"
           ) {
-            console.warn(`Cloudinary deletion may have failed for ${publicId}:`, cloudinaryResult);
+            console.warn(
+              `Cloudinary deletion may have failed for ${publicId}:`,
+              cloudinaryResult
+            );
           }
         } catch (err) {
           console.error(`Error deleting ${publicId} from Cloudinary:`, err);
@@ -981,7 +1144,6 @@ const deleteImage = async (req, res) => {
         success: true,
         message: "Image deleted successfully from both Cloudinary and database",
       });
-
     }
   } catch (error) {
     console.error("Delete error:", error);
@@ -1072,7 +1234,8 @@ const getDashboardStats = async (req, res) => {
 
 module.exports = {
   addMainCategory,
-  addImage,
+  // addImage,
+  addPost,
   addSubcategory,
   addFilter,
   updateMainCategory,

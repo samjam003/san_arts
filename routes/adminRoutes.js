@@ -4,7 +4,7 @@ const multer = require("multer");
 const path = require("path");
 const {
   addMainCategory,
-  addImage,
+  addPost,
   addSubcategory,
   addFilter,
   updateMainCategory,
@@ -21,18 +21,30 @@ const {
   deleteImage,
   getDashboardStats,
 } = require("../controllers/adminController");
-const { upload } = require("../config/cloudinary");
+const { upload, uploadMedia } = require("../config/cloudinary");
 
 // router.post("/addImage", upload.single("image"), addImage);
 //IMAGES
+// router.post(
+//   "/addImage",
+//   upload.fields([
+//     { name: "main_image", maxCount: 1 },
+//     { name: "sub_images", maxCount: 10 },
+//   ]),
+//   addImage
+// );
+
+// Route for adding a post with image and optional video
 router.post(
-  "/addImage",
-  upload.fields([
-    { name: "main_image", maxCount: 1 },
-    { name: "sub_images", maxCount: 10 },
+  "/addPost",
+  uploadMedia.fields([
+    { name: "main_image", maxCount: 1 }, // Required
+    { name: "sub_images", maxCount: 5 }, // Optional, max 5 sub images
+    { name: "video", maxCount: 1 }, // Optional
   ]),
-  addImage
+  addPost
 );
+
 router.get("/images", getAllImages);
 router.delete("/deleteImage/:id", deleteImage);
 router.put("/updateImage/:id", upload.single("image"), updateImage);
