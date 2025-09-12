@@ -373,43 +373,117 @@ const addSubcategory = async (req, res) => {
 
 const addFilter = async (req, res) => {
   try {
-    const { filter_name, description, values, subcategory_id } = req.body;
+    const { filter_name, description, values, subcategory_ids } = req.body;
 
-    if (!filter_name || !values || !subcategory_id) {
-      return res.status(400).json({ error: "Missing required fields" });
+    // Validate required fields
+    if (!filter_name || !values || !subcategory_ids) {
+      return res.status(400).json({
+        error:
+          "Missing required fields: filter_name, values, and subcategory_ids are required",
+      });
     }
 
-    const { data: newFilter, error } = await supabase
-      .from("Filters")
-      .insert([
-        {
-          filter_name: filter_name,
-          values: values, // Array of values
-          subcategory_id: subcategory_id,
-          description: description,
-        },
-      ])
-      .select()
-      .single();
+    // Ensure subcategory_ids is an array
+    const subcategoryArray = Array.isArray(subcategory_ids)
+      ? subcategory_ids
+      : [subcategory_ids];
 
-    if (error) {
-      return res.status(500).json({ error: error.message });
+    if (subcategoryArray.length === 0) {
+      return res.status(400).json({
+        error: "At least one subcategory_id is required",
+      });
     }
 
-    // Log the activity
-    await logActivity(
-      "create",
-      `New filter "${filter_name}" was added`,
-      "filter",
-      newFilter.id
-    );
+    const createdFilters = [];
+    const failedInsertions = [];
 
-    return res.status(200).json(newFilter);
+    // Loop through each subcategory and create a filter
+    for (const subcategory_id of subcategoryArray) {
+      try {
+        const { data: newFilter, error } = await supabase
+          .from("Filters")
+          .insert([
+            {
+              filter_name: filter_name,
+              values: values, // Array of values
+              subcategory_id: subcategory_id,
+              description: description,
+            },
+          ])
+          .select()
+          .single();
+
+        if (error) {
+          console.error(
+            `Error inserting filter for subcategory ${subcategory_id}:`,
+            error
+          );
+          failedInsertions.push({
+            subcategory_id,
+            error: error.message,
+          });
+          continue;
+        }
+
+        createdFilters.push(newFilter);
+
+        // Log the activity for this filter
+        try {
+          await logActivity(
+            "create",
+            `New filter "${filter_name}" was added for subcategory ${subcategory_id}`,
+            "filter",
+            newFilter.id
+          );
+        } catch (logError) {
+          console.error(`Logging error for filter ${newFilter.id}:`, logError);
+          // Don't fail the insertion if logging fails
+        }
+      } catch (insertionError) {
+        console.error(
+          `Unexpected error for subcategory ${subcategory_id}:`,
+          insertionError
+        );
+        failedInsertions.push({
+          subcategory_id,
+          error: insertionError.message,
+        });
+      }
+    }
+
+    // Determine response based on results
+    if (createdFilters.length === 0) {
+      return res.status(500).json({
+        success: false,
+        error: "Failed to create filters for all subcategories",
+        failedInsertions,
+      });
+    }
+
+    if (failedInsertions.length > 0) {
+      return res.status(207).json({
+        // 207 Multi-Status
+        success: true,
+        message: `Filter "${filter_name}" created for ${createdFilters.length} out of ${subcategoryArray.length} subcategories`,
+        data: createdFilters,
+        successCount: createdFilters.length,
+        failedCount: failedInsertions.length,
+        failures: failedInsertions,
+      });
+    }
+
+    return res.status(200).json({
+      success: true,
+      message: `Filter "${filter_name}" created successfully for all ${createdFilters.length} subcategories`,
+      data: createdFilters,
+      count: createdFilters.length,
+    });
   } catch (err) {
-    console.error(err);
-    return res
-      .status(500)
-      .json({ error: "An error occurred while adding the filter." });
+    console.error("Add filter error:", err);
+    return res.status(500).json({
+      error: "An error occurred while adding the filter.",
+      details: err.message,
+    });
   }
 };
 
