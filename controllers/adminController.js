@@ -890,6 +890,182 @@ const getAllImages = async (req, res) => {
   }
 };
 
+// const updateImage = async (req, res) => {
+//   const { id } = req.params;
+//   const {
+//     img_title,
+//     description,
+//     main_category_id,
+//     subcategory_id,
+//     filterValues: rawFilterValues,
+//   } = req.body;
+
+//   console.log("Update Image Request:", {
+//     id,
+//     body: req.body,
+//     file: req.file,
+//   });
+
+//   try {
+//     // Start a transaction
+//     const updateData = {
+//       img_title,
+//       description,
+//       main_category_id,
+//       subcategory_id,
+//       ...(req.file && { img_url: req.file.path }),
+//     };
+
+//     console.log("Update Data:", updateData);
+
+//     const { data: image, error: imageError } = await supabase
+//       .from("art_images")
+//       .update(updateData)
+//       .eq("id", id)
+//       .select()
+//       .single();
+
+//     if (imageError) {
+//       console.error("Image Update Error:", imageError);
+//       return res.status(500).json({
+//         success: false,
+//         message: "Failed to update image",
+//         error: imageError.message,
+//       });
+//     }
+
+//     // Delete existing filter values
+//     const { error: deleteError } = await supabase
+//       .from("filter_value")
+//       .delete()
+//       .eq("img_id", id);
+
+//     if (deleteError) {
+//       console.error("Filter Values Delete Error:", deleteError);
+//       return res.status(500).json({
+//         success: false,
+//         message: "Failed to delete existing filter values",
+//         error: deleteError.message,
+//       });
+//     }
+
+//     // Parse filter values
+//     let parsedFilterValues = [];
+//     if (rawFilterValues) {
+//       try {
+//         parsedFilterValues =
+//           typeof rawFilterValues === "string"
+//             ? JSON.parse(rawFilterValues)
+//             : rawFilterValues;
+//       } catch (err) {
+//         console.error("Filter Values Parse Error:", err);
+//         return res.status(400).json({
+//           success: false,
+//           message: "Invalid filterValues JSON format",
+//         });
+//       }
+//     }
+
+//     console.log("Parsed Filter Values:", parsedFilterValues);
+
+//     // Insert new filter values if provided
+//     if (Array.isArray(parsedFilterValues) && parsedFilterValues.length > 0) {
+//       const filterInsertData = parsedFilterValues.map((item) => ({
+//         img_id: id,
+//         filter_id: item.filter_id,
+//         value: item.value,
+//       }));
+
+//       console.log("Filter Insert Data:", filterInsertData);
+
+//       const { error: filterInsertError } = await supabase
+//         .from("filter_value")
+//         .insert(filterInsertData);
+
+//       if (filterInsertError) {
+//         console.error("Filter Values Insert Error:", filterInsertError);
+//         return res.status(500).json({
+//           success: false,
+//           message: "Failed to insert new filter values",
+//           error: filterInsertError.message,
+//         });
+//       }
+//     }
+
+//     // Fetch the updated image with its filter values
+//     const { data: updatedImage, error: fetchError } = await supabase
+//       .from("art_images")
+//       .select(
+//         `
+//         *,
+//         main_categories(category_name),
+//         subcategories(subcategory_name)
+//       `
+//       )
+//       .eq("id", id)
+//       .single();
+
+//     if (fetchError) {
+//       console.error("Fetch Updated Image Error:", fetchError);
+//       return res.status(500).json({
+//         success: false,
+//         message: "Failed to fetch updated image",
+//         error: fetchError.message,
+//       });
+//     }
+
+//     // Fetch filter values
+//     const { data: filterValues, error: filterError } = await supabase
+//       .from("filter_value")
+//       .select(
+//         `
+//         value,
+//         filter_id,
+//         Filters(filter_name)
+//       `
+//       )
+//       .eq("img_id", id);
+
+//     if (filterError) {
+//       console.error("Fetch Filter Values Error:", filterError);
+//       return res.status(500).json({
+//         success: false,
+//         message: "Failed to fetch filter values",
+//         error: filterError.message,
+//       });
+//     }
+
+//     const response = {
+//       ...updatedImage,
+//       filterValues: filterValues.map((fv) => ({
+//         filter_id: fv.filter_id,
+//         value: fv.value,
+//       })),
+//     };
+
+//     console.log("Update Response:", response);
+
+//     // Log the activity
+//     await logActivity(
+//       "update",
+//       `Image "${img_title}" was updated`,
+//       "image",
+//       id
+//     );
+
+//     res.status(200).json(response);
+//   } catch (error) {
+//     console.error("Update error:", error);
+//     res.status(500).json({
+//       success: false,
+//       message: "Error updating image",
+//       error: error.message,
+//     });
+//   }
+// };
+
+// updateImage v- 2.0
+
 const updateImage = async (req, res) => {
   const { id } = req.params;
   const {
@@ -903,20 +1079,38 @@ const updateImage = async (req, res) => {
   console.log("Update Image Request:", {
     id,
     body: req.body,
-    file: req.file,
+    file: req.files.img_url,
+    files: req.files.sub_images[0],
   });
 
   try {
-    // Start a transaction
+    // Prepare update data object
     const updateData = {
       img_title,
       description,
       main_category_id,
       subcategory_id,
-      ...(req.file && { img_url: req.file.path }),
     };
 
+    // Handle main image upload (single file)
+    if (req.file) {
+      updateData.img_url = req.file.img_url;
+      console.log("Main Image URL:", updateData.img_url);
+    }
+
+    // Handle sub-images upload (multiple files)
+    if (req.files && req.files.length > 0) {
+      // If using multer with multiple files, req.files will be an array
+      const subImageUrls = req.files.map((file) => file.path);
+      updateData.sub_images = subImageUrls;
+    } else if (req.files && req.files.sub_images) {
+      // If using multer with named fields, req.files.sub_images will be an array
+      const subImageUrls = req.files.sub_images.map((file) => file.path);
+      updateData.sub_images = subImageUrls;
+    }
+
     console.log("Update Data:", updateData);
+    console.log("img_url :", updateData.img_url);
 
     const { data: image, error: imageError } = await supabase
       .from("art_images")
@@ -1063,64 +1257,6 @@ const updateImage = async (req, res) => {
     });
   }
 };
-
-// const deleteImage = async (req, res) => {
-//   const { id } = req.params;
-
-//   try {
-//     // Get image title before deleting
-//     const { data: imageData } = await supabase
-//       .from("art_images")
-//       .select("img_title")
-//       .eq("id", id)
-//       .single();
-
-//     // Delete filter values first
-//     const { error: filterError } = await supabase
-//       .from("filter_value")
-//       .delete()
-//       .eq("img_id", id);
-
-//     if (filterError) {
-//       return res.status(500).json({
-//         success: false,
-//         message: "Failed to delete filter values",
-//         error: filterError.message,
-//       });
-//     }
-
-//     // Delete the image
-//     const { error: imageError } = await supabase
-//       .from("art_images")
-//       .delete()
-//       .eq("id", id);
-
-//     if (imageError) {
-//       return res.status(500).json({
-//         success: false,
-//         message: "Failed to delete image",
-//         error: imageError.message,
-//       });
-//     }
-
-//     // Log the activity
-//     await logActivity(
-//       "delete",
-//       `Image "${imageData?.img_title || "Unknown"}" was deleted`,
-//       "image",
-//       id
-//     );
-
-//     res.status(200).json({ message: "Image deleted successfully" });
-//   } catch (error) {
-//     console.error("Delete error:", error);
-//     res.status(500).json({
-//       success: false,
-//       message: "Error deleting image",
-//       error: error.message,
-//     });
-//   }
-// };
 
 // delete in cloudinary
 

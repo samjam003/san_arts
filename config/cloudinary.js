@@ -105,30 +105,30 @@ const uploadMedia = multer({
   limits: {
     fileSize: 100 * 1024 * 1024, // 100MB limit
   },
-  fileFilter: (req, file, cb) => {
-    const imageFormats = ["jpg", "jpeg", "png", "gif", "webp"];
-    const videoFormats = ["mp4", "mov", "avi", "mkv", "webm", "flv"];
-    const fileExt = file.originalname.split(".").pop().toLowerCase();
+  // fileFilter: (req, file, cb) => {
+  //   const imageFormats = ["jpg", "jpeg", "png", "gif", "webp"];
+  //   const videoFormats = ["mp4", "mov", "avi", "mkv", "webm", "flv"];
+  //   const fileExt = file.originalname.split(".").pop().toLowerCase();
 
-    if (file.fieldname.includes("image") && imageFormats.includes(fileExt)) {
-      cb(null, true);
-    } else if (
-      file.fieldname.includes("video") &&
-      videoFormats.includes(fileExt)
-    ) {
-      cb(null, true);
-    } else {
-      cb(
-        new Error(
-          `Invalid file format for ${file.fieldname}. Allowed formats: ${
-            file.fieldname.includes("image")
-              ? imageFormats.join(", ")
-              : videoFormats.join(", ")
-          }`
-        )
-      );
-    }
-  },
+  //   if (file.fieldname.includes("image") && imageFormats.includes(fileExt)) {
+  //     cb(null, true);
+  //   } else if (
+  //     file.fieldname.includes("video") &&
+  //     videoFormats.includes(fileExt)
+  //   ) {
+  //     cb(null, true);
+  //   } else {
+  //     cb(
+  //       new Error(
+  //         `Invalid file format for ${file.fieldname}. Allowed formats: ${
+  //           file.fieldname.includes("image")
+  //             ? imageFormats.join(", ")
+  //             : videoFormats.join(", ")
+  //         }`
+  //       )
+  //     );
+  //   }
+  // },
 });
 
 // Helper function to upload file to Cloudinary with custom folder
