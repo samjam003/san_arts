@@ -47,7 +47,15 @@ router.post(
 
 router.get("/images", getAllImages);
 router.delete("/deleteImage/:id", deleteImage);
-router.put("/updateImage/:id", upload.single("image"), updateImage);
+router.put(
+  "/updateImage/:id",
+  uploadMedia.fields([
+    { name: "main_image", maxCount: 1 }, // Optional - only if updating main image
+    { name: "sub_images", maxCount: 5 }, // Optional - sub images
+    { name: "video", maxCount: 1 }, // Optional - video
+  ]),
+  updateImage
+);
 // MAIN-CATEGORY
 router.post("/addMainCategory", addMainCategory);
 router.put("/updateMainCategory/:id", updateMainCategory);

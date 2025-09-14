@@ -649,8 +649,7 @@ const deleteSubcategory = async (req, res) => {
     // Log the activity
     await logActivity(
       "delete",
-      `Subcategory "${
-        subcategoryData?.subcategory_name || "Unknown"
+      `Subcategory "${subcategoryData?.subcategory_name || "Unknown"
       }" was deleted`,
       "subcategory",
       id
@@ -898,26 +897,178 @@ const updateImage = async (req, res) => {
     main_category_id,
     subcategory_id,
     filterValues: rawFilterValues,
+    removeSubImages, // Array of sub-image URLs to remove
+    removeVideo, // Boolean to remove video
   } = req.body;
 
   console.log("Update Image Request:", {
     id,
     body: req.body,
-    file: req.file,
+    files: req.files,
+    removeSubImages: removeSubImages,
+    removeSubImagesType: typeof removeSubImages,
+    removeVideo: removeVideo,
+    removeVideoType: typeof removeVideo,
   });
 
   try {
-    // Start a transaction
+    // Get current image data first
+    const { data: currentImage, error: fetchCurrentError } = await supabase
+      .from("art_images")
+      .select("img_url, sub_images, video_url")
+      .eq("id", id)
+      .single();
+
+    if (fetchCurrentError || !currentImage) {
+      return res.status(404).json({
+        success: false,
+        message: "Image not found",
+        error: fetchCurrentError?.message,
+      });
+    }
+
+    // Extract files from request
+    const mainImage = req.files?.main_image?.[0];
+    const subImages = req.files?.sub_images || [];
+    const video = req.files?.video?.[0];
+
+    let newMainImageUrl = currentImage.img_url;
+    let newSubImageUrls = Array.isArray(currentImage.sub_images) ? currentImage.sub_images.filter(url => url !== null && url !== undefined) : [];
+    let newVideoUrl = currentImage.video_url;
+
+    try {
+      // Handle main image update
+      if (mainImage) {
+        // Delete old main image from Cloudinary if exists
+        if (currentImage.img_url) {
+          const oldPublicId = getPublicIdFromUrl(currentImage.img_url);
+          if (oldPublicId) {
+            try {
+              await cloudinary.uploader.destroy(oldPublicId);
+              console.log(`Deleted old main image: ${oldPublicId}`);
+            } catch (deleteError) {
+              console.warn(`Failed to delete old main image: ${oldPublicId}`, deleteError);
+            }
+          }
+        }
+
+        // Upload new main image
+        const mainImageResult = await uploadToCloudinary(mainImage.buffer, {
+          folder: "sanarts/images",
+          resource_type: "image",
+          allowed_formats: ["jpg", "jpeg", "png", "gif", "webp"],
+        });
+        newMainImageUrl = mainImageResult.secure_url;
+      }
+
+      // Handle sub-images removal
+      let parsedRemoveSubImages = [];
+      if (removeSubImages) {
+        try {
+          parsedRemoveSubImages = typeof removeSubImages === "string"
+            ? JSON.parse(removeSubImages)
+            : removeSubImages;
+        } catch (err) {
+          console.error("Error parsing removeSubImages:", err);
+          parsedRemoveSubImages = Array.isArray(removeSubImages) ? removeSubImages : [];
+        }
+      }
+
+      console.log("Parsed removeSubImages:", parsedRemoveSubImages);
+
+      if (Array.isArray(parsedRemoveSubImages) && parsedRemoveSubImages.length > 0) {
+        for (const urlToRemove of parsedRemoveSubImages) {
+          const publicId = getPublicIdFromUrl(urlToRemove);
+          if (publicId) {
+            try {
+              await cloudinary.uploader.destroy(publicId);
+              console.log(`Deleted sub-image: ${publicId}`);
+            } catch (deleteError) {
+              console.warn(`Failed to delete sub-image: ${publicId}`, deleteError);
+            }
+          }
+          // Remove from array
+          newSubImageUrls = newSubImageUrls.filter(url => url !== urlToRemove && url !== null && url !== undefined);
+        }
+      }
+
+      // Handle new sub-images upload
+      if (subImages.length > 0) {
+        const subImagePromises = subImages.map((img) =>
+          uploadToCloudinary(img.buffer, {
+            folder: "sanarts/images",
+            resource_type: "image",
+            allowed_formats: ["jpg", "jpeg", "png", "gif", "webp"],
+          })
+        );
+        const subImageResults = await Promise.all(subImagePromises);
+        const newSubUrls = subImageResults.map((result) => result.secure_url);
+        newSubImageUrls = [...newSubImageUrls, ...newSubUrls].filter(url => url !== null && url !== undefined);
+      }
+
+      // Handle video removal
+      if (removeVideo === 'true' || removeVideo === true) {
+        if (currentImage.video_url) {
+          const videoPublicId = getPublicIdFromUrl(currentImage.video_url);
+          if (videoPublicId) {
+            try {
+              await cloudinary.uploader.destroy(videoPublicId, { resource_type: "video" });
+              console.log(`Deleted video: ${videoPublicId}`);
+            } catch (deleteError) {
+              console.warn(`Failed to delete video: ${videoPublicId}`, deleteError);
+            }
+          }
+        }
+        newVideoUrl = null;
+      }
+
+      // Handle new video upload
+      if (video) {
+        // Delete old video if exists
+        if (currentImage.video_url) {
+          const oldVideoPublicId = getPublicIdFromUrl(currentImage.video_url);
+          if (oldVideoPublicId) {
+            try {
+              await cloudinary.uploader.destroy(oldVideoPublicId, { resource_type: "video" });
+              console.log(`Deleted old video: ${oldVideoPublicId}`);
+            } catch (deleteError) {
+              console.warn(`Failed to delete old video: ${oldVideoPublicId}`, deleteError);
+            }
+          }
+        }
+
+        // Upload new video
+        const videoResult = await uploadToCloudinary(video.buffer, {
+          folder: "sanarts/videos",
+          resource_type: "video",
+          allowed_formats: ["mp4", "mov", "avi", "mkv", "webm", "flv"],
+        });
+        newVideoUrl = videoResult.secure_url;
+      }
+    } catch (uploadError) {
+      console.error("Cloudinary upload/delete error:", uploadError);
+      return res.status(500).json({
+        success: false,
+        message: "Failed to process media files",
+        error: uploadError.message,
+      });
+    }
+
+    // Prepare update data
+    const cleanedSubImageUrls = newSubImageUrls.filter(url => url !== null && url !== undefined);
     const updateData = {
       img_title,
       description,
       main_category_id,
       subcategory_id,
-      ...(req.file && { img_url: req.file.path }),
+      img_url: newMainImageUrl,
+      sub_images: cleanedSubImageUrls.length > 0 ? cleanedSubImageUrls : null,
+      video_url: newVideoUrl,
     };
 
     console.log("Update Data:", updateData);
 
+    // Update the image record
     const { data: image, error: imageError } = await supabase
       .from("art_images")
       .update(updateData)
@@ -1041,6 +1192,7 @@ const updateImage = async (req, res) => {
         filter_id: fv.filter_id,
         value: fv.value,
       })),
+      has_video: !!updatedImage.video_url,
     };
 
     console.log("Update Response:", response);
@@ -1048,17 +1200,21 @@ const updateImage = async (req, res) => {
     // Log the activity
     await logActivity(
       "update",
-      `Image "${img_title}" was updated`,
-      "image",
+      `Post "${img_title}" was updated${newVideoUrl ? " with video" : ""}`,
+      "post",
       id
     );
 
-    res.status(200).json(response);
+    res.status(200).json({
+      success: true,
+      message: `Post updated successfully${newVideoUrl ? " with video" : ""}`,
+      data: response,
+    });
   } catch (error) {
     console.error("Update error:", error);
     res.status(500).json({
       success: false,
-      message: "Error updating image",
+      message: "Error updating post",
       error: error.message,
     });
   }
