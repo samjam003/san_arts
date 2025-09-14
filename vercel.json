@@ -1,16 +1,20 @@
 {
-    "version": 2,
-    "builds": [
-      {
-        "src": "api/index.js",
-        "use": "@vercel/node"
+  "version": 2,
+  "builds": [
+    {
+      "src": "api/index.js",
+      "use": "@vercel/node"
+    }
+  ],
+  "routes": [
+    {
+      "src": "/(.*)",
+      "dest": "api/index.js",
+      "headers": {
+        "Access-Control-Allow-Origin": "https://www.sunartstudio.in, https://sunartstudio.in",
+        "Access-Control-Allow-Methods": "GET, POST, PUT, DELETE, OPTIONS",
+        "Access-Control-Allow-Headers": "Content-Type, Authorization, X-Requested-With"
       }
-    ],
-    "routes": [
-      {
-        "src": "/(.*)",
-        "dest": "api/index.js"
-      }
-    ]
-  }
-  
+    }
+  ]
+}
