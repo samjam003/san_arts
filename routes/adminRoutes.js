@@ -45,6 +45,16 @@ router.post(
   addPost
 );
 
+// router.put("/updateImage/:id", upload.single("image"), updateImage);
+router.put(
+  "/updateImage/:id",
+  uploadMedia.fields([
+    { name: "img_url", maxCount: 1 },
+    { name: "sub_images", maxCount: 10 },
+  ]),
+  updateImage
+);
+
 router.get("/images", getAllImages);
 router.delete("/deleteImage/:id", deleteImage);
 router.put(
@@ -63,7 +73,11 @@ router.delete("/deleteMainCategory/:id", deleteMainCategory);
 //SUB-CATEGORY
 router.post("/addSubcategory", upload.single("image"), addSubcategory);
 router.get("/subcategories", getAllSubcategories);
-router.put("/updateSubcategory/:id", upload.single("image"), updateSubcategory);
+router.put(
+  "/updateSubcategory/:id",
+  upload.single("background_img"),
+  updateSubcategory
+);
 router.delete("/deleteSubcategory/:id", deleteSubcategory);
 //FILTERS
 router.post("/addFilter", addFilter);
