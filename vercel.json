@@ -9,12 +9,7 @@
   "routes": [
     {
       "src": "/(.*)",
-      "dest": "api/index.js",
-      "headers": {
-        "Access-Control-Allow-Origin": "https://www.sunartstudio.in, https://sunartstudio.in",
-        "Access-Control-Allow-Methods": "GET, POST, PUT, DELETE, OPTIONS",
-        "Access-Control-Allow-Headers": "Content-Type, Authorization, X-Requested-With"
-      }
+      "dest": "api/index.js"
     }
   ]
 }
