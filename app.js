@@ -2,8 +2,28 @@ const express = require("express");
 const app = express();
 //add cors
 const cors = require("cors");
+
+// Configure CORS properly
+const corsOptions = {
+    origin: [
+        'https://www.sunartstudio.in',
+        'https://sunartstudio.in',
+        'http://localhost:3000',
+        'http://localhost:5173', // for Vite dev server
+        'https://localhost:3000',
+    ],
+    credentials: true,
+    methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
+    allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With'],
+    optionsSuccessStatus: 200 // some legacy browsers (IE11, various SmartTVs) choke on 204
+};
+
 //use cors
-app.use(cors());
+app.use(cors(corsOptions));
+
+// Handle preflight requests
+app.options('*', cors(corsOptions));
+
 //import routes here
 const homeRoutes = require("./routes/homeRoutes");
 const adminRoutes = require("./routes/adminRoutes");
