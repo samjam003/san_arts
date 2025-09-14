@@ -61,7 +61,7 @@ router.put(
   "/updateImage/:id",
   uploadMedia.fields([
     { name: "main_image", maxCount: 1 }, // Optional - only if updating main image
-    { name: "sub_images", maxCount: 5 }, // Optional - sub images
+    { name: "sub_images", maxCount: 10 }, // Optional - sub images
     { name: "video", maxCount: 1 }, // Optional - video
   ]),
   updateImage
