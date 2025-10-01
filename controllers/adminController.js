@@ -575,7 +575,14 @@ const deleteMainCategory = async (req, res) => {
 const updateSubcategory = async (req, res) => {
   const { id } = req.params;
   const { main_category_id, subcategory_name, description } = req.body;
-  const background_img = req.file ? req.file.path : undefined;
+  // Support both single-file and fields modes; accept either 'background_img' or 'image'
+  let background_img;
+  if (req.file) {
+    background_img = req.file.path;
+  } else if (req.files) {
+    const fileObj = (req.files["background_img"] && req.files["background_img"][0]) || (req.files["image"] && req.files["image"][0]);
+    background_img = fileObj ? fileObj.path : undefined;
+  }
 
   if (!subcategory_name || !main_category_id) {
     return res
@@ -1385,6 +1392,63 @@ const deleteImage = async (req, res) => {
   }
 };
 
+// Update an image's pin status (is_pinned boolean)
+const updateImagePinStatus = async (req, res) => {
+  const { id } = req.params;
+  const { is_pinned } = req.body;
+  console.log("Request to pin/unpin image for id:", id, "with is_pinned:", is_pinned);
+
+  if (typeof is_pinned !== "boolean") {
+    return res.status(400).json({
+      success: false,
+      message: "is_pinned must be a boolean",
+    });
+  }
+
+  try {
+    const { data, error } = await supabase
+      .from("art_images")
+      .update({ is_pinned })
+      .eq("id", id)
+      .select()
+      .single();
+
+    if (error) {
+      return res.status(500).json({
+        success: false,
+        message: "Failed to update pin status",
+        error: error.message,
+      });
+    }
+
+    if (!data) {
+      return res.status(404).json({
+        success: false,
+        message: "Image not found",
+      });
+    }
+
+    await logActivity(
+      "update",
+      `Post "${data.img_title || id}" was ${is_pinned ? "pinned" : "unpinned"}`,
+      "post",
+      id
+    );
+
+    return res.status(200).json({
+      success: true,
+      message: `Image ${is_pinned ? "pinned" : "unpinned"} successfully`,
+      data,
+    });
+  } catch (err) {
+    return res.status(500).json({
+      success: false,
+      message: "Unexpected error occurred",
+      error: err.message,
+    });
+  }
+};
+
 const getDashboardStats = async (req, res) => {
   try {
     // Get total categories count
@@ -1481,4 +1545,5 @@ module.exports = {
   updateImage,
   deleteImage,
   getDashboardStats,
+  updateImagePinStatus,
 };

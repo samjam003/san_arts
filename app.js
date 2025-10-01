@@ -13,6 +13,7 @@ const corsOptions = {
             'http://localhost:5173', // for Vite dev server
             'https://localhost:3000',
             'https://localhost:8080',
+             'http://127.0.0.1:8080',
         ];
 
         // Allow requests with no origin (like mobile apps or curl requests)

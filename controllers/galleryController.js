@@ -121,6 +121,7 @@ const getImagesBySubcategory = async (req, res) => {
         img_title, 
         description, 
         likes,
+        is_pinned,
         created_at,
         main_categories(category_name),
         subcategories(subcategory_name)

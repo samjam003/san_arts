@@ -20,6 +20,7 @@ const {
   updateImage,
   deleteImage,
   getDashboardStats,
+  updateImagePinStatus,
 } = require("../controllers/adminController");
 const { upload, uploadMedia } = require("../config/cloudinary");
 
@@ -75,7 +76,10 @@ router.post("/addSubcategory", upload.single("image"), addSubcategory);
 router.get("/subcategories", getAllSubcategories);
 router.put(
   "/updateSubcategory/:id",
-  upload.single("background_img"),
+  upload.fields([
+    { name: "background_img", maxCount: 1 },
+    { name: "image", maxCount: 1 },
+  ]),
   updateSubcategory
 );
 router.delete("/deleteSubcategory/:id", deleteSubcategory);
@@ -87,5 +91,8 @@ router.get("/filters", getAllFilters);
 router.get("/filters/:subcategoryId", getFiltersBySubcategory);
 //DASHBOARD
 router.get("/dashboard/stats", getDashboardStats);
+
+// Pin / Unpin image
+router.put("/images/:id/pin", updateImagePinStatus);
 
 module.exports = router;
