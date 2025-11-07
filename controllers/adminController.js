@@ -572,17 +572,67 @@ const deleteMainCategory = async (req, res) => {
   }
 };
 
+// const updateSubcategory = async (req, res) => {
+//   const { id } = req.params;
+//   const { main_category_id, subcategory_name, description } = req.body;
+//   const background_img = req.file ? req.file.path : undefined;
+
+//   if (!subcategory_name || !main_category_id) {
+//     return res
+//       .status(400)
+//       .json({ message: "Subcategory name and main category are required." });
+//   }
+
+//   try {
+//     const updateData = {
+//       main_category_id,
+//       subcategory_name,
+//       description,
+//       ...(background_img && { background_img }),
+//     };
+
+//     const { data, error } = await supabase
+//       .from("subcategories")
+//       .update(updateData)
+//       .eq("id", id)
+//       .select()
+//       .single();
+
+//     if (error) {
+//       return res
+//         .status(500)
+//         .json({ message: "Error updating subcategory", error: error.message });
+//     }
+
+//     if (!data) {
+//       return res.status(404).json({ message: "Subcategory not found" });
+//     }
+
+//     // Log the activity
+//     await logActivity(
+//       "update",
+//       `Subcategory "${subcategory_name}" was updated`,
+//       "subcategory",
+//       id
+//     );
+
+//     res.status(200).json(data);
+//   } catch (err) {
+//     res
+//       .status(500)
+//       .json({ message: "Unexpected error occurred", error: err.message });
+//   }
+// };
+
 const updateSubcategory = async (req, res) => {
   const { id } = req.params;
   const { main_category_id, subcategory_name, description } = req.body;
-  // Support both single-file and fields modes; accept either 'background_img' or 'image'
-  let background_img;
-  if (req.file) {
-    background_img = req.file.path;
-  } else if (req.files) {
-    const fileObj = (req.files["background_img"] && req.files["background_img"][0]) || (req.files["image"] && req.files["image"][0]);
-    background_img = fileObj ? fileObj.path : undefined;
-  }
+
+  console.log("Update Subcategory Request:", {
+    id,
+    body: req.body,
+    file: req.file,
+  });
 
   if (!subcategory_name || !main_category_id) {
     return res
@@ -591,13 +641,65 @@ const updateSubcategory = async (req, res) => {
   }
 
   try {
+    // Get current subcategory data first
+    const { data: currentSubcategory, error: fetchCurrentError } =
+      await supabase
+        .from("subcategories")
+        .select("background_img")
+        .eq("id", id)
+        .single();
+
+    if (fetchCurrentError || !currentSubcategory) {
+      return res.status(404).json({
+        success: false,
+        message: "Subcategory not found",
+        error: fetchCurrentError?.message,
+      });
+    }
+
+    let newBackgroundImageUrl = currentSubcategory.background_img;
+
+    // Handle background image update
+    if (req.file) {
+      console.log("New background image uploaded:", {
+        originalname: req.file.originalname,
+        path: req.file.path,
+        filename: req.file.filename,
+      });
+
+      // Delete old background image from Cloudinary if exists
+      if (currentSubcategory.background_img) {
+        const oldPublicId = getPublicIdFromUrl(
+          currentSubcategory.background_img
+        );
+        if (oldPublicId) {
+          try {
+            await cloudinary.uploader.destroy(oldPublicId);
+            console.log(`Deleted old background image: ${oldPublicId}`);
+          } catch (deleteError) {
+            console.warn(
+              `Failed to delete old background image: ${oldPublicId}`,
+              deleteError
+            );
+          }
+        }
+      }
+
+      // Use the new image URL (already uploaded to Cloudinary by multer)
+      newBackgroundImageUrl = req.file.path;
+    }
+
+    // Prepare update data
     const updateData = {
       main_category_id,
       subcategory_name,
       description,
-      ...(background_img && { background_img }),
+      background_img: newBackgroundImageUrl,
     };
 
+    console.log("Update Data:", updateData);
+
+    // Update the subcategory record
     const { data, error } = await supabase
       .from("subcategories")
       .update(updateData)
@@ -606,28 +708,45 @@ const updateSubcategory = async (req, res) => {
       .single();
 
     if (error) {
-      return res
-        .status(500)
-        .json({ message: "Error updating subcategory", error: error.message });
+      console.error("Subcategory Update Error:", error);
+      return res.status(500).json({
+        success: false,
+        message: "Error updating subcategory",
+        error: error.message,
+      });
     }
 
     if (!data) {
-      return res.status(404).json({ message: "Subcategory not found" });
+      return res.status(404).json({
+        success: false,
+        message: "Subcategory not found",
+      });
     }
+
+    console.log("Update Response:", data);
 
     // Log the activity
     await logActivity(
       "update",
-      `Subcategory "${subcategory_name}" was updated`,
+      `Subcategory "${subcategory_name}" was updated${req.file ? " with new background image" : ""
+      }`,
       "subcategory",
       id
     );
 
-    res.status(200).json(data);
+    res.status(200).json({
+      success: true,
+      message: `Subcategory updated successfully${req.file ? " with new background image" : ""
+        }`,
+      data: data,
+    });
   } catch (err) {
-    res
-      .status(500)
-      .json({ message: "Unexpected error occurred", error: err.message });
+    console.error("Update error:", err);
+    res.status(500).json({
+      success: false,
+      message: "Unexpected error occurred",
+      error: err.message,
+    });
   }
 };
 
@@ -940,7 +1059,11 @@ const updateImage = async (req, res) => {
     const video = req.files?.video?.[0];
 
     let newMainImageUrl = currentImage.img_url;
-    let newSubImageUrls = Array.isArray(currentImage.sub_images) ? currentImage.sub_images.filter(url => url !== null && url !== undefined) : [];
+    let newSubImageUrls = Array.isArray(currentImage.sub_images)
+      ? currentImage.sub_images.filter(
+        (url) => url !== null && url !== undefined
+      )
+      : [];
     let newVideoUrl = currentImage.video_url;
 
     try {
@@ -954,7 +1077,10 @@ const updateImage = async (req, res) => {
               await cloudinary.uploader.destroy(oldPublicId);
               console.log(`Deleted old main image: ${oldPublicId}`);
             } catch (deleteError) {
-              console.warn(`Failed to delete old main image: ${oldPublicId}`, deleteError);
+              console.warn(
+                `Failed to delete old main image: ${oldPublicId}`,
+                deleteError
+              );
             }
           }
         }
@@ -972,18 +1098,24 @@ const updateImage = async (req, res) => {
       let parsedRemoveSubImages = [];
       if (removeSubImages) {
         try {
-          parsedRemoveSubImages = typeof removeSubImages === "string"
-            ? JSON.parse(removeSubImages)
-            : removeSubImages;
+          parsedRemoveSubImages =
+            typeof removeSubImages === "string"
+              ? JSON.parse(removeSubImages)
+              : removeSubImages;
         } catch (err) {
           console.error("Error parsing removeSubImages:", err);
-          parsedRemoveSubImages = Array.isArray(removeSubImages) ? removeSubImages : [];
+          parsedRemoveSubImages = Array.isArray(removeSubImages)
+            ? removeSubImages
+            : [];
         }
       }
 
       console.log("Parsed removeSubImages:", parsedRemoveSubImages);
 
-      if (Array.isArray(parsedRemoveSubImages) && parsedRemoveSubImages.length > 0) {
+      if (
+        Array.isArray(parsedRemoveSubImages) &&
+        parsedRemoveSubImages.length > 0
+      ) {
         for (const urlToRemove of parsedRemoveSubImages) {
           const publicId = getPublicIdFromUrl(urlToRemove);
           if (publicId) {
@@ -991,11 +1123,16 @@ const updateImage = async (req, res) => {
               await cloudinary.uploader.destroy(publicId);
               console.log(`Deleted sub-image: ${publicId}`);
             } catch (deleteError) {
-              console.warn(`Failed to delete sub-image: ${publicId}`, deleteError);
+              console.warn(
+                `Failed to delete sub-image: ${publicId}`,
+                deleteError
+              );
             }
           }
           // Remove from array
-          newSubImageUrls = newSubImageUrls.filter(url => url !== urlToRemove && url !== null && url !== undefined);
+          newSubImageUrls = newSubImageUrls.filter(
+            (url) => url !== urlToRemove && url !== null && url !== undefined
+          );
         }
       }
 
@@ -1010,19 +1147,26 @@ const updateImage = async (req, res) => {
         );
         const subImageResults = await Promise.all(subImagePromises);
         const newSubUrls = subImageResults.map((result) => result.secure_url);
-        newSubImageUrls = [...newSubImageUrls, ...newSubUrls].filter(url => url !== null && url !== undefined);
+        newSubImageUrls = [...newSubImageUrls, ...newSubUrls].filter(
+          (url) => url !== null && url !== undefined
+        );
       }
 
       // Handle video removal
-      if (removeVideo === 'true' || removeVideo === true) {
+      if (removeVideo === "true" || removeVideo === true) {
         if (currentImage.video_url) {
           const videoPublicId = getPublicIdFromUrl(currentImage.video_url);
           if (videoPublicId) {
             try {
-              await cloudinary.uploader.destroy(videoPublicId, { resource_type: "video" });
+              await cloudinary.uploader.destroy(videoPublicId, {
+                resource_type: "video",
+              });
               console.log(`Deleted video: ${videoPublicId}`);
             } catch (deleteError) {
-              console.warn(`Failed to delete video: ${videoPublicId}`, deleteError);
+              console.warn(
+                `Failed to delete video: ${videoPublicId}`,
+                deleteError
+              );
             }
           }
         }
@@ -1036,10 +1180,15 @@ const updateImage = async (req, res) => {
           const oldVideoPublicId = getPublicIdFromUrl(currentImage.video_url);
           if (oldVideoPublicId) {
             try {
-              await cloudinary.uploader.destroy(oldVideoPublicId, { resource_type: "video" });
+              await cloudinary.uploader.destroy(oldVideoPublicId, {
+                resource_type: "video",
+              });
               console.log(`Deleted old video: ${oldVideoPublicId}`);
             } catch (deleteError) {
-              console.warn(`Failed to delete old video: ${oldVideoPublicId}`, deleteError);
+              console.warn(
+                `Failed to delete old video: ${oldVideoPublicId}`,
+                deleteError
+              );
             }
           }
         }
@@ -1062,7 +1211,9 @@ const updateImage = async (req, res) => {
     }
 
     // Prepare update data
-    const cleanedSubImageUrls = newSubImageUrls.filter(url => url !== null && url !== undefined);
+    const cleanedSubImageUrls = newSubImageUrls.filter(
+      (url) => url !== null && url !== undefined
+    );
     const updateData = {
       img_title,
       description,
