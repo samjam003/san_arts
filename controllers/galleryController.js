@@ -339,6 +339,7 @@ const getArtworkById = async (req, res) => {
       created_at: imageData.created_at,
       sub_images: imageData.sub_images || null,
       video_url: imageData.video_url || null,
+      youtube_url: imageData.youtube_url || null,
     },
     main_category: imageData.main_categories,
     subcategory: imageData.subcategories,

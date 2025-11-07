@@ -177,6 +177,7 @@ const addPost = async (req, res) => {
       main_category_id,
       subcategory_id,
       filterValues,
+      youtube_url,
     } = req.body;
 
     // Extract files from request
@@ -237,6 +238,14 @@ const addPost = async (req, res) => {
     }
 
     // Prepare data for database insertion
+    const rawYoutubeUrl = Array.isArray(youtube_url)
+      ? youtube_url[0]
+      : youtube_url;
+    const normalizedYoutubeUrl =
+      typeof rawYoutubeUrl === "string" && rawYoutubeUrl.trim() !== ""
+        ? rawYoutubeUrl.trim()
+        : null;
+
     const postData = {
       img_title,
       img_url: mainImageUrl,
@@ -244,7 +253,7 @@ const addPost = async (req, res) => {
       main_category_id,
       subcategory_id,
       sub_images: subImageUrls.length > 0 ? subImageUrls : null,
-      video_url: videoUrl, // Add video URL field
+      youtube_url: normalizedYoutubeUrl, // Add video URL field
     };
 
     // Insert into Supabase
@@ -266,7 +275,7 @@ const addPost = async (req, res) => {
     // Log activity
     await logActivity(
       "create",
-      `New post "${img_title}" was added${videoUrl ? " with video" : ""}`,
+        `New post "${img_title}" was added${normalizedYoutubeUrl ? " with video" : ""}`,
       "post",
       insertedPost.id
     );
@@ -308,10 +317,10 @@ const addPost = async (req, res) => {
 
     return res.status(200).json({
       success: true,
-      message: `Post uploaded successfully${videoUrl ? " with video" : ""}`,
+      message: `Post uploaded successfully${normalizedYoutubeUrl ? " with video" : ""}`,
       data: {
         ...insertedPost,
-        has_video: !!videoUrl,
+        has_video: !!normalizedYoutubeUrl,
       },
     });
   } catch (error) {
@@ -1025,6 +1034,7 @@ const updateImage = async (req, res) => {
     filterValues: rawFilterValues,
     removeSubImages, // Array of sub-image URLs to remove
     removeVideo, // Boolean to remove video
+    youtube_url,
   } = req.body;
 
   console.log("Update Image Request:", {
@@ -1214,6 +1224,14 @@ const updateImage = async (req, res) => {
     const cleanedSubImageUrls = newSubImageUrls.filter(
       (url) => url !== null && url !== undefined
     );
+    const rawYoutubeUrl = Array.isArray(youtube_url)
+      ? youtube_url[0]
+      : youtube_url;
+    const normalizedYoutubeUrl =
+      typeof rawYoutubeUrl === "string" && rawYoutubeUrl.trim() !== ""
+        ? rawYoutubeUrl.trim()
+        : null;
+
     const updateData = {
       img_title,
       description,
@@ -1222,6 +1240,7 @@ const updateImage = async (req, res) => {
       img_url: newMainImageUrl,
       sub_images: cleanedSubImageUrls.length > 0 ? cleanedSubImageUrls : null,
       video_url: newVideoUrl,
+      youtube_url: normalizedYoutubeUrl,
     };
 
     console.log("Update Data:", updateData);
