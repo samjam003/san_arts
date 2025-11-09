@@ -275,7 +275,7 @@ const addPost = async (req, res) => {
     // Log activity
     await logActivity(
       "create",
-        `New post "${img_title}" was added${normalizedYoutubeUrl ? " with video" : ""}`,
+      `New post "${img_title}" was added${normalizedYoutubeUrl ? " with video" : ""}`,
       "post",
       insertedPost.id
     );
@@ -635,12 +635,12 @@ const deleteMainCategory = async (req, res) => {
 
 const updateSubcategory = async (req, res) => {
   const { id } = req.params;
-  const { main_category_id, subcategory_name, description } = req.body;
+  const { main_category_id, subcategory_name, description, background_img } = req.body;
 
   console.log("Update Subcategory Request:", {
     id,
     body: req.body,
-    file: req.file,
+    files: req.files,
   });
 
   if (!subcategory_name || !main_category_id) {
@@ -668,12 +668,14 @@ const updateSubcategory = async (req, res) => {
 
     let newBackgroundImageUrl = currentSubcategory.background_img;
 
-    // Handle background image update
-    if (req.file) {
+    // Handle background image update - check for file upload first (req.files from upload.fields())
+    const uploadedFile = req.files?.image?.[0] || req.files?.background_img?.[0];
+
+    if (uploadedFile) {
       console.log("New background image uploaded:", {
-        originalname: req.file.originalname,
-        path: req.file.path,
-        filename: req.file.filename,
+        originalname: uploadedFile.originalname,
+        path: uploadedFile.path,
+        filename: uploadedFile.filename,
       });
 
       // Delete old background image from Cloudinary if exists
@@ -695,7 +697,11 @@ const updateSubcategory = async (req, res) => {
       }
 
       // Use the new image URL (already uploaded to Cloudinary by multer)
-      newBackgroundImageUrl = req.file.path;
+      newBackgroundImageUrl = uploadedFile.path;
+    } else if (background_img && typeof background_img === 'string' && background_img.trim() !== '') {
+      // Handle case where background_img is sent as a URL string in the body
+      console.log("Background image URL provided in body:", background_img);
+      newBackgroundImageUrl = background_img;
     }
 
     // Prepare update data
@@ -735,18 +741,17 @@ const updateSubcategory = async (req, res) => {
     console.log("Update Response:", data);
 
     // Log the activity
+    const hasImageUpdate = uploadedFile || (background_img && background_img !== currentSubcategory.background_img);
     await logActivity(
       "update",
-      `Subcategory "${subcategory_name}" was updated${req.file ? " with new background image" : ""
-      }`,
+      `Subcategory "${subcategory_name}" was updated${hasImageUpdate ? " with new background image" : ""}`,
       "subcategory",
       id
     );
 
     res.status(200).json({
       success: true,
-      message: `Subcategory updated successfully${req.file ? " with new background image" : ""
-        }`,
+      message: `Subcategory updated successfully${hasImageUpdate ? " with new background image" : ""}`,
       data: data,
     });
   } catch (err) {
