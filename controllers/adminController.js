@@ -275,7 +275,9 @@ const addPost = async (req, res) => {
     // Log activity
     await logActivity(
       "create",
-      `New post "${img_title}" was added${normalizedYoutubeUrl ? " with video" : ""}`,
+      `New post "${img_title}" was added${
+        normalizedYoutubeUrl ? " with video" : ""
+      }`,
       "post",
       insertedPost.id
     );
@@ -317,7 +319,9 @@ const addPost = async (req, res) => {
 
     return res.status(200).json({
       success: true,
-      message: `Post uploaded successfully${normalizedYoutubeUrl ? " with video" : ""}`,
+      message: `Post uploaded successfully${
+        normalizedYoutubeUrl ? " with video" : ""
+      }`,
       data: {
         ...insertedPost,
         has_video: !!normalizedYoutubeUrl,
@@ -635,7 +639,8 @@ const deleteMainCategory = async (req, res) => {
 
 const updateSubcategory = async (req, res) => {
   const { id } = req.params;
-  const { main_category_id, subcategory_name, description, background_img } = req.body;
+  const { main_category_id, subcategory_name, description, background_img } =
+    req.body;
 
   console.log("Update Subcategory Request:", {
     id,
@@ -669,7 +674,8 @@ const updateSubcategory = async (req, res) => {
     let newBackgroundImageUrl = currentSubcategory.background_img;
 
     // Handle background image update - check for file upload first (req.files from upload.fields())
-    const uploadedFile = req.files?.image?.[0] || req.files?.background_img?.[0];
+    const uploadedFile =
+      req.files?.image?.[0] || req.files?.background_img?.[0];
 
     if (uploadedFile) {
       console.log("New background image uploaded:", {
@@ -698,7 +704,11 @@ const updateSubcategory = async (req, res) => {
 
       // Use the new image URL (already uploaded to Cloudinary by multer)
       newBackgroundImageUrl = uploadedFile.path;
-    } else if (background_img && typeof background_img === 'string' && background_img.trim() !== '') {
+    } else if (
+      background_img &&
+      typeof background_img === "string" &&
+      background_img.trim() !== ""
+    ) {
       // Handle case where background_img is sent as a URL string in the body
       console.log("Background image URL provided in body:", background_img);
       newBackgroundImageUrl = background_img;
@@ -741,17 +751,23 @@ const updateSubcategory = async (req, res) => {
     console.log("Update Response:", data);
 
     // Log the activity
-    const hasImageUpdate = uploadedFile || (background_img && background_img !== currentSubcategory.background_img);
+    const hasImageUpdate =
+      uploadedFile ||
+      (background_img && background_img !== currentSubcategory.background_img);
     await logActivity(
       "update",
-      `Subcategory "${subcategory_name}" was updated${hasImageUpdate ? " with new background image" : ""}`,
+      `Subcategory "${subcategory_name}" was updated${
+        hasImageUpdate ? " with new background image" : ""
+      }`,
       "subcategory",
       id
     );
 
     res.status(200).json({
       success: true,
-      message: `Subcategory updated successfully${hasImageUpdate ? " with new background image" : ""}`,
+      message: `Subcategory updated successfully${
+        hasImageUpdate ? " with new background image" : ""
+      }`,
       data: data,
     });
   } catch (err) {
@@ -789,7 +805,8 @@ const deleteSubcategory = async (req, res) => {
     // Log the activity
     await logActivity(
       "delete",
-      `Subcategory "${subcategoryData?.subcategory_name || "Unknown"
+      `Subcategory "${
+        subcategoryData?.subcategory_name || "Unknown"
       }" was deleted`,
       "subcategory",
       id
@@ -1076,8 +1093,8 @@ const updateImage = async (req, res) => {
     let newMainImageUrl = currentImage.img_url;
     let newSubImageUrls = Array.isArray(currentImage.sub_images)
       ? currentImage.sub_images.filter(
-        (url) => url !== null && url !== undefined
-      )
+          (url) => url !== null && url !== undefined
+        )
       : [];
     let newVideoUrl = currentImage.video_url;
 
@@ -1571,7 +1588,12 @@ const deleteImage = async (req, res) => {
 const updateImagePinStatus = async (req, res) => {
   const { id } = req.params;
   const { is_pinned } = req.body;
-  console.log("Request to pin/unpin image for id:", id, "with is_pinned:", is_pinned);
+  console.log(
+    "Request to pin/unpin image for id:",
+    id,
+    "with is_pinned:",
+    is_pinned
+  );
 
   if (typeof is_pinned !== "boolean") {
     return res.status(400).json({
@@ -1701,6 +1723,197 @@ const getDashboardStats = async (req, res) => {
   }
 };
 
+const addFeedback = async (req, res) => {
+  try {
+    const { name, comment, art_image_id } = req.body;
+
+    // Validate required fields
+    if (!name || !comment) {
+      return res.status(400).json({ error: "Missing required fields" });
+    }
+
+    // If file is uploaded, use its path; otherwise, use a default image
+    const profileImg = req.file ? req.file.path : "cloudinary default image";
+
+    // Insert feedback
+    const { data, error } = await supabase
+      .from("feedbacks")
+      .insert([
+        {
+          art_image_id: art_image_id,
+          profile_img: profileImg,
+          name: name,
+          comment: comment,
+        },
+      ])
+      .select()
+      .single();
+
+    if (error) {
+      return res.status(500).json({ error: error.message });
+    }
+
+    // Log the activity (fixed template string syntax)
+    await logActivity(
+      "create",
+      `New Feedback "${name}" was added`,
+      "Feedback",
+      data.id
+    );
+
+    res.status(200).json(data);
+  } catch (err) {
+    console.error("Error adding feedback:", err);
+    res.status(500).json({ error: "Internal Server Error" });
+  }
+};
+
+const getFeedbacksByArtImageId = async (req, res) => {
+  try {
+    const { art_id } = req.params;
+
+    // Validate parameter
+    if (!art_id) {
+      return res.status(400).json({ error: "art_image_id is required" });
+    }
+
+    // Fetch feedbacks from Supabase
+    const { data: feedbacks, error } = await supabase
+      .from("feedbacks")
+      .select("*")
+      .eq("art_image_id", art_id)
+      .order("created_at", { ascending: false }); // Optional: sort newest first
+
+    if (error) {
+      return res.status(500).json({ error: error.message });
+    }
+
+    // If no feedbacks found, still return an empty array (not an error)
+    res.status(200).json({
+      success: true,
+      count: feedbacks.length,
+      feedbacks: feedbacks,
+    });
+  } catch (err) {
+    console.error("Error fetching feedbacks:", err);
+    res.status(500).json({ error: "Internal Server Error" });
+  }
+};
+
+const deleteFeedback = async (req, res) => {
+  try {
+    const { feedback_id } = req.params;
+
+    // Validate ID
+    if (!feedback_id) {
+      return res.status(400).json({ error: "Feedback ID is required" });
+    }
+
+    // Fetch the feedback record first
+    const { data: feedback, error: fetchError } = await supabase
+      .from("feedbacks")
+      .select("*")
+      .eq("id", feedback_id)
+      .single();
+
+    if (fetchError || !feedback) {
+      return res.status(404).json({ error: "Feedback not found" });
+    }
+
+    // Delete the feedback from the database
+    const { error: deleteError } = await supabase
+      .from("feedbacks")
+      .delete()
+      .eq("id", feedback_id);
+
+    if (deleteError) {
+      return res.status(500).json({ error: deleteError.message });
+    }
+
+    // Log the deletion activity
+    await logActivity(
+      "delete",
+      `Feedback "${feedback.name}" was deleted`,
+      "Feedback",
+      feedback_id
+    );
+
+    res
+      .status(200)
+      .json({ success: true, message: "Feedback deleted successfully" });
+  } catch (err) {
+    console.error("Error deleting feedback:", err);
+    res.status(500).json({ error: "Internal Server Error" });
+  }
+};
+
+const updateFeedback = async (req, res) => {
+  try {
+    const { feedback_id } = req.params;
+    const { name, comment } = req.body;
+
+    // Validate ID
+    if (!feedback_id) {
+      return res.status(400).json({ error: "Feedback ID is required" });
+    }
+
+    // Fetch existing feedback
+    const { data: existingFeedback, error: fetchError } = await supabase
+      .from("feedbacks")
+      .select("*")
+      .eq("id", feedback_id)
+      .single();
+
+    if (fetchError || !existingFeedback) {
+      return res.status(404).json({ error: "Feedback not found" });
+    }
+
+    // Determine which image to keep or replace
+    let profileImg = existingFeedback.profile_img;
+
+    if (req.file) {
+      // Delete old image if it's not the default one
+      ///del from cloudinary
+
+      // Assign new uploaded image
+      profileImg = req.file.path;
+    }
+
+    // Update feedback fields
+    const { data: updatedFeedback, error: updateError } = await supabase
+      .from("feedbacks")
+      .update({
+        name: name || existingFeedback.name,
+        comment: comment || existingFeedback.comment,
+        profile_img: profileImg,
+      })
+      .eq("id", feedback_id)
+      .select()
+      .single();
+
+    if (updateError) {
+      return res.status(500).json({ error: updateError.message });
+    }
+
+    // Log the activity
+    await logActivity(
+      "update",
+      `Feedback "${updatedFeedback.name}" was updated`,
+      "Feedback",
+      feedback_id
+    );
+
+    res.status(200).json({
+      success: true,
+      message: "Feedback updated successfully",
+      data: updatedFeedback,
+    });
+  } catch (err) {
+    console.error("Error updating feedback:", err);
+    res.status(500).json({ error: "Internal Server Error" });
+  }
+};
+
 module.exports = {
   addMainCategory,
   // addImage,
@@ -1721,4 +1934,8 @@ module.exports = {
   deleteImage,
   getDashboardStats,
   updateImagePinStatus,
+  addFeedback,
+  getFeedbacksByArtImageId,
+  deleteFeedback,
+  updateFeedback,
 };

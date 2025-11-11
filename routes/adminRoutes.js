@@ -24,6 +24,10 @@ const {
   deleteImage,
   getDashboardStats,
   updateImagePinStatus,
+  addFeedback,
+  deleteFeedback,
+  updateFeedback,
+  getFeedbacksByArtImageId,
 } = require("../controllers/adminController");
 const { upload, uploadMedia } = require("../config/cloudinary");
 
@@ -111,5 +115,17 @@ router.get("/dashboard/stats", requireAuth, getDashboardStats);
 
 // Pin / Unpin image
 router.put("/images/:id/pin", requireAuth, updateImagePinStatus);
+
+//Feedback
+
+router.post("/addFeedback", requireAuth, upload.single("image"), addFeedback);
+router.get("/feedbacks/:art_id", requireAuth, getFeedbacksByArtImageId);
+router.put(
+  "/updateFeedback/:feedback_id",
+  requireAuth,
+  upload.single("image"),
+  updateFeedback
+);
+router.delete("/deleteFeedback/:feedback_id", requireAuth, deleteFeedback);
 
 module.exports = router;
