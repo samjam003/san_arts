@@ -412,6 +412,39 @@ const fetchLikes = async (req, res) => {
     res.status(500).json({ error: err.message });
   }
 };
+
+const getFeedbacksByArtImageId = async (req, res) => {
+  try {
+    const { artworkID } = req.params;
+    console.log("artworkID", artworkID);
+
+    // Validate parameter
+    if (!artworkID) {
+      return res.status(400).json({ error: "art_image_id is required" });
+    }
+
+    // Fetch feedbacks from Supabase
+    const { data: feedbacks, error } = await supabase
+      .from("feedbacks")
+      .select("*")
+      .eq("art_image_id", artworkID)
+      .order("created_at", { ascending: false }); // Optional: sort newest first
+
+    if (error) {
+      return res.status(500).json({ error: error.message });
+    }
+
+    // If no feedbacks found, still return an empty array (not an error)
+    res.status(200).json({
+      success: true,
+      count: feedbacks.length,
+      feedbacks: feedbacks,
+    });
+  } catch (err) {
+    console.error("Error fetching feedbacks:", err);
+    res.status(500).json({ error: "Internal Server Error" });
+  }
+};
 module.exports = {
   getArtworkById,
   getAllMainCategories,
@@ -420,5 +453,6 @@ module.exports = {
   getImagesBySubcategory,
   getFilteredImages,
   toggleLike,
-  fetchLikes
+  fetchLikes,
+  getFeedbacksByArtImageId
 };

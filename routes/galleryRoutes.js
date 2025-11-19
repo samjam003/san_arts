@@ -9,6 +9,7 @@ const {
   getArtworkById,
   toggleLike,
   fetchLikes,
+  getFeedbacksByArtImageId
 } = require("../controllers/galleryController");
 
 //routes
@@ -25,6 +26,7 @@ router.get("/artwork/:artworkId", getArtworkById);
 router.post("/artwork/:artworkID/like", toggleLike);
 
 router.get("/artwork/:artworkID/likes", fetchLikes);
+router.get("/artwork/:artworkID/feedbacks", getFeedbacksByArtImageId);
 
 
 module.exports = router;
